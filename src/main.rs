@@ -49,10 +49,7 @@ fn main() -> anyhow::Result<()> {
                     "  HINT: Pipe command output to `{}` to apply variables automatically",
                     shell.source_command()
                 );
-                eprintln!(
-                    "  E.g. `env-select VARIABLE | {}`",
-                    shell.source_command()
-                );
+                eprintln!("  E.g. `es VARIABLE | {}`", shell.source_command());
             }
 
             println!("{}", export_command);
