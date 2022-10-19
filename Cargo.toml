@@ -5,6 +5,7 @@ edition = "2021"
 keywords = ["env", "environment", "export"]
 license = "MIT"
 name = "env-select"
+repository = "https://github.com/LucasPickering/env-select"
 version = "0.1.0"
 
 [[bin]]

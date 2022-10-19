@@ -1,10 +1,11 @@
 # env-select
 
+![license](https://img.shields.io/github/license/LucasPickering/env-select)
+[![crates.io version](https://img.shields.io/crates/v/env-select.svg)](https://crates.io/crates/env-select)
+
 Easily switch between predefined values for arbitrary environment variables.
 
 ## Usage
-
-### Create env-select file
 
 First, define `.env-select.toml`. This is where you'll specify possible options for each variable. Here's an example:
 
