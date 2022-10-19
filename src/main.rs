@@ -1,3 +1,6 @@
+mod console;
+
+use crate::console::prompt_value;
 use clap::Parser;
 use figment::{
     providers::{Format, Toml},
@@ -23,11 +26,20 @@ struct Config {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    // TODO walk up the directory tree to find more files
     let config: Config =
         Figment::new().merge(Toml::file(FILE_NAME)).extract()?;
 
-    println!("Values for {}:", args.variable);
-    dbg!(config.variables.get(&args.variable));
+    match config.variables.get(&args.variable) {
+        Some(values) => {
+            // Show a prompt to ask the user which value to use
+            let value = prompt_value(&args.variable, values)?;
+            println!("export {}={}", args.variable, value);
+        }
+        None => {
+            eprintln!("No values defined for {}", args.variable);
+        }
+    }
 
     Ok(())
 }
