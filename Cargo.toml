@@ -1,5 +1,9 @@
 [package]
+authors = ["Lucas Pickering <lucas@lucaspickering.me>"]
+description = "Easily switch between common values for arbitrary environment variables"
 edition = "2021"
+keywords = ["env", "environment", "export"]
+license = "MIT"
 name = "env-select"
 version = "0.1.0"
 
