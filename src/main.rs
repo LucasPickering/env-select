@@ -1,17 +1,10 @@
+mod config;
 mod console;
 mod shell;
 
-use crate::{console::prompt_value, shell::Shell};
+use crate::{config::Config, console::prompt_options, shell::Shell};
 use atty::Stream;
 use clap::Parser;
-use figment::{
-    providers::{Format, Toml},
-    Figment,
-};
-use serde::Deserialize;
-use std::collections::HashMap;
-
-const FILE_NAME: &str = ".env-select.toml";
 
 /// TODO
 #[derive(Clone, Debug, Parser)]
@@ -21,21 +14,14 @@ struct Args {
     variable: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-struct Config {
-    variables: HashMap<String, Vec<String>>,
-}
-
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    // TODO walk up the directory tree to find more files
-    let config: Config =
-        Figment::new().merge(Toml::file(FILE_NAME)).extract()?;
+    let config = Config::load()?;
 
     match config.variables.get(&args.variable) {
         Some(values) => {
             // Show a prompt to ask the user which value to use
-            let value = prompt_value(&args.variable, values)?;
+            let value = prompt_options(&args.variable, values)?;
 
             // Generate a shell command
             let shell = Shell::detect()?;
