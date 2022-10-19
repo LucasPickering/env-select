@@ -2,6 +2,7 @@ mod console;
 mod shell;
 
 use crate::{console::prompt_value, shell::Shell};
+use atty::Stream;
 use clap::Parser;
 use figment::{
     providers::{Format, Toml},
@@ -35,14 +36,25 @@ fn main() -> anyhow::Result<()> {
         Some(values) => {
             // Show a prompt to ask the user which value to use
             let value = prompt_value(&args.variable, values)?;
+
+            // Generate a shell command
             let shell = Shell::detect()?;
             let export_command = shell.export_variable(&args.variable, &value);
 
-            // TODO only print this if stdout isn't already redirect
-            eprintln!(
-                "Pipe command output to `{}` to apply it. E.g. `env-select VARIABLE | source`",
-                shell.source_command()
-            );
+            // If stdout isn't redirected, then tell the user how to do that
+            // for OPTIMAL PERFORMANCE GAINS
+            if atty::is(Stream::Stdout) {
+                eprintln!("Run the command below to apply variables changes");
+                eprintln!(
+                    "  HINT: Pipe command output to `{}` to apply variables automatically",
+                    shell.source_command()
+                );
+                eprintln!(
+                    "  E.g. `env-select VARIABLE | {}`",
+                    shell.source_command()
+                );
+            }
+
             println!("{}", export_command);
         }
         None => {

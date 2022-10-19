@@ -156,6 +156,7 @@ name = "env-select"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "atty",
  "clap",
  "dialoguer",
  "figment",
