@@ -2,19 +2,23 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 
 /// Show a prompt that allows the user to select a value for a variable, from
 /// a given list. The user can also select a "Custom" option to enter their own
-/// value.
+/// value. Returns `Ok(None)` iff the user quits out of the prompt.
 pub fn prompt_options(
     variable: &str,
     options: &[String],
-) -> anyhow::Result<String> {
+) -> anyhow::Result<Option<String>> {
     let theme = ColorfulTheme::default();
     // Show a prompt to ask the user which value to use
-    let chosen_index = Select::with_theme(&theme)
+    let chosen_index_opt = Select::with_theme(&theme)
         .with_prompt(format!("{}=", variable))
         .items(options)
         .item("Custom")
         .default(0)
-        .interact()?;
+        .interact_opt()?;
+    let chosen_index = match chosen_index_opt {
+        Some(value) => value,
+        None => return Ok(None),
+    };
 
     let value: String = if chosen_index == options.len() {
         // Let user input custom value
@@ -26,5 +30,5 @@ pub fn prompt_options(
         options[chosen_index].to_owned()
     };
 
-    Ok(value)
+    Ok(Some(value))
 }
