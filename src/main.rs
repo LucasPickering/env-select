@@ -9,7 +9,7 @@ use crate::{
 };
 use atty::Stream;
 use clap::Parser;
-use log::LevelFilter;
+use log::{error, LevelFilter};
 
 /// TODO
 #[derive(Clone, Debug, Parser)]
@@ -28,6 +28,8 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     env_logger::Builder::new()
         .format_timestamp(None)
+        .format_module_path(false)
+        .format_target(false)
         .filter_level(if args.verbose {
             LevelFilter::Trace
         } else {
@@ -42,7 +44,7 @@ fn main() -> anyhow::Result<()> {
         match get_export_command(&args.select_key, &config, shell)? {
             Some(export_command) => export_command,
             None => {
-                eprintln!(
+                error!(
                     "No known variables or variable sets by the name {}",
                     &args.select_key
                 );
@@ -89,13 +91,18 @@ fn print_export_command(shell: Shell, export_command: &str) {
     // If stdout isn't redirected, then tell the user how to do that
     // for OPTIMAL PERFORMANCE GAINS
     if atty::is(Stream::Stdout) {
-        eprintln!(
+        // Normally we don't want to print anything to stdout except for the
+        // commands, but in this case we know that stdout isn't being piped
+        // anywhere, so it's safe to send regular output there. That way, if
+        // the user happens to be piping stderr somewhere, they still see this
+        // warning.
+        println!(
             "  HINT: Pipe command output to `{}` to apply values automatically",
             shell.source_command()
         );
-        eprintln!("  E.g. `es VARIABLE | {}`", shell.source_command());
-        eprintln!("Run the command(s) below to apply variables changes:");
-        eprintln!();
+        println!("  E.g. `es VARIABLE | {}`", shell.source_command());
+        println!("Run the command(s) below to apply variables changes:");
+        println!();
     }
 
     println!("{}", export_command);
