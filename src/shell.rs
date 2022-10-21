@@ -1,5 +1,5 @@
 use anyhow::bail;
-use std::{env, ffi::OsStr, path::PathBuf};
+use std::{collections::HashMap, env, ffi::OsStr, path::PathBuf};
 
 /// A known shell type. We can use this to export variables.
 #[derive(Copy, Clone, Debug)]
@@ -40,9 +40,23 @@ impl Shell {
     pub fn export_variable(&self, variable: &str, value: &str) -> String {
         // Run a shell command to export the variable
         match self {
-            // TODO figure out if there is any injection bugs here
-            Self::Bash | Self::Zsh => format!("export {}={}", variable, value),
-            Self::Fish => format!("set -x {variable} {value}"),
+            // Single quotes are needed to prevent injection vulnerabilities
+            Self::Bash | Self::Zsh => {
+                format!("export '{}'='{}'", variable, value)
+            }
+            Self::Fish => format!("set -x '{variable}' '{value}'"),
         }
+    }
+
+    /// Get the shell commands to export multiple environment variables.
+    pub fn export_variables(
+        &self,
+        variables: &HashMap<String, String>,
+    ) -> String {
+        variables
+            .iter()
+            .map(|(variable, value)| self.export_variable(variable, value))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
