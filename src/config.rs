@@ -52,7 +52,10 @@ impl Config {
             let content = fs::read_to_string(path)
                 .with_context(|| format!("Error reading file {path:?}"))?;
             match toml::from_str(&content) {
-                Ok(parsed) => config.merge(parsed),
+                Ok(parsed) => {
+                    trace!("Loaded from file {path:?}: {parsed:?}");
+                    config.merge(parsed);
+                }
                 Err(error) => {
                     error!("{path:?} will be ignored due to error: {error}")
                 }
@@ -97,12 +100,14 @@ impl Config {
     /// be merged together, and the value lists for any duplicate variables will
     /// be appended together
     fn merge(&mut self, other: Self) {
+        // For each variable, append options onto our existing list
         for (variable, options) in other.variables.into_iter() {
-            self.variables
-                .entry(variable)
-                // TODO can we remove this clone?
-                .and_modify(|e| e.extend(options.iter().cloned()))
-                .or_insert(options);
+            self.variables.entry(variable).or_default().extend(options);
+        }
+
+        // Each each varset key, append options onto our existing list
+        for (name, options) in other.variable_sets.into_iter() {
+            self.variable_sets.entry(name).or_default().extend(options);
         }
     }
 }
