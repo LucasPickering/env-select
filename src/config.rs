@@ -2,8 +2,9 @@ use anyhow::Context;
 use log::{debug, error, trace};
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     env, fs,
+    hash::Hash,
     path::{Path, PathBuf},
 };
 
@@ -34,8 +35,8 @@ pub struct Config {
     ///
     /// Note that for a single column, each cell *does not necessarily contain
     /// the same set of variables*. Some may be omitted!
-    #[serde(default, rename = "varsets")]
-    pub variable_sets: HashMap<String, Vec<HashMap<String, String>>>,
+    #[serde(default, rename = "apps")]
+    pub applications: HashMap<String, Application>,
 }
 
 impl Config {
@@ -95,19 +96,68 @@ impl Config {
 
         Ok(config_files)
     }
+}
 
-    /// Merge another config file into this one. The two maps of variables will
-    /// be merged together, and the value lists for any duplicate variables will
-    /// be appended together
+/// An application is a grouping of profiles. Each profile should be different
+/// "versions" of the same "application", e.g. dev vs prd for the same service.
+/// Different colors of the same car, so to speak.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Application {
+    #[serde(flatten)]
+    pub profiles: HashMap<String, Profile>,
+}
+
+/// A profile is a set of fixed variable mappings, i.e. each variable maps to
+/// a singular value.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Profile {
+    #[serde(flatten)]
+    pub variables: HashMap<String, String>,
+}
+
+/// Indicates that two values of this type can be merged together.
+trait Merge {
+    /// Merge another value into this one. The "other" value **will take
+    /// precedence** over this one, meaning conflicting values from the incoming
+    /// will overwrite.
+    fn merge(&mut self, other: Self);
+}
+
+impl Merge for Config {
     fn merge(&mut self, other: Self) {
-        // For each variable, append options onto our existing list
-        for (variable, options) in other.variables.into_iter() {
-            self.variables.entry(variable).or_default().extend(options);
-        }
+        self.variables.merge(other.variables);
+        self.applications.merge(other.applications);
+    }
+}
 
-        // Each each varset key, append options onto our existing list
-        for (name, options) in other.variable_sets.into_iter() {
-            self.variable_sets.entry(name).or_default().extend(options);
+impl Merge for Application {
+    fn merge(&mut self, other: Self) {
+        self.profiles.merge(other.profiles)
+    }
+}
+
+impl Merge for Profile {
+    fn merge(&mut self, other: Self) {
+        // Incoming entries take priority over ours
+        self.variables.extend(other.variables.into_iter())
+    }
+}
+
+impl<K: Eq + Hash, V: Merge> Merge for HashMap<K, V> {
+    fn merge(&mut self, other: Self) {
+        for (k, other_v) in other {
+            match self.entry(k) {
+                Entry::Occupied(mut entry) => entry.get_mut().merge(other_v),
+                Entry::Vacant(entry) => {
+                    entry.insert(other_v);
+                }
+            }
         }
+    }
+}
+
+impl<T> Merge for Vec<T> {
+    fn merge(&mut self, other: Self) {
+        self.extend(other)
     }
 }

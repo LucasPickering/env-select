@@ -4,18 +4,19 @@ mod shell;
 
 use crate::{
     config::Config,
-    console::{prompt_variable, prompt_variable_set},
+    console::{prompt_application, prompt_variable},
     shell::Shell,
 };
 use atty::Stream;
 use clap::Parser;
 use log::{error, LevelFilter};
 
-/// TODO
+/// A utility to select between predefined values or sets of environment
+/// variables.
 #[derive(Clone, Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// The name of the variable or variable set to select a value for
+    /// The name of the variable or application to select a value for
     select_key: String,
 
     /// Increase output verbosity, for debugging
@@ -45,7 +46,7 @@ fn main() -> anyhow::Result<()> {
             Some(export_command) => export_command,
             None => {
                 error!(
-                    "No known variables or variable sets by the name {}",
+                    "No known variables or application by the name {}",
                     &args.select_key
                 );
                 return Ok(());
@@ -58,13 +59,13 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Prompt the user to select a value/value set for the variable/variable set
-/// they gave, then use that to calculate the command(s) we want to feed to the
-/// shell to set the desired environment variables. This is basically the whole
+/// Prompt the user to select a value/profile for the variable/application they
+/// gave, then use that to calculate the command(s) we want to feed to the shell
+/// to set the desired environment variables. This is basically the whole
 /// program.
 ///
 /// Returns `Ok(None))` if the select key doesn't match any known variables or
-/// variable sets.
+/// applications.
 fn get_export_command(
     select_key: &str,
     config: &Config,
@@ -75,11 +76,11 @@ fn get_export_command(
         let value = prompt_variable(select_key, var_options)?;
 
         Ok(Some(shell.export_variable(select_key, value)))
-    } else if let Some(varset_options) = config.variable_sets.get(select_key) {
+    } else if let Some(applications) = config.applications.get(select_key) {
         // Show a prompt to ask the user which varset to use
-        let varset = prompt_variable_set(varset_options)?;
+        let profile = prompt_application(applications)?;
 
-        Ok(Some(shell.export_variables(varset)))
+        Ok(Some(shell.export_profile(profile)))
     } else {
         Ok(None)
     }

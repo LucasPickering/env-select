@@ -1,5 +1,6 @@
+use crate::config::Profile;
 use anyhow::bail;
-use std::{collections::HashMap, env, ffi::OsStr, path::PathBuf};
+use std::{env, ffi::OsStr, path::PathBuf};
 
 /// A known shell type. We can use this to export variables.
 #[derive(Copy, Clone, Debug)]
@@ -48,12 +49,11 @@ impl Shell {
         }
     }
 
-    /// Get the shell commands to export multiple environment variables.
-    pub fn export_variables(
-        &self,
-        variables: &HashMap<String, String>,
-    ) -> String {
-        variables
+    /// Get the shell commands to export multiple environment variables from a
+    /// profile.
+    pub fn export_profile(&self, profile: &Profile) -> String {
+        profile
+            .variables
             .iter()
             .map(|(variable, value)| self.export_variable(variable, value))
             .collect::<Vec<_>>()
