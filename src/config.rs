@@ -1,8 +1,8 @@
 use anyhow::Context;
+use indexmap::{map::Entry, IndexMap};
 use log::{debug, error, trace};
 use serde::Deserialize;
 use std::{
-    collections::{hash_map::Entry, HashMap},
     env, fs,
     hash::Hash,
     path::{Path, PathBuf},
@@ -10,33 +10,23 @@ use std::{
 
 const FILE_NAME: &str = ".env-select.toml";
 
-/// Add configuration, as loaded from one or more config files
+/// Add configuration, as loaded from one or more config files. We use
+/// [indexmap::IndexMap] in here to preserve ordering from the input files.
+/// This (hopefully) makes usage more intuitive for the use.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     /// A set of possible values for individual variables. Each variable maps
     /// to zero or more possible values, and the user can select from this
     /// list for each variable *independently* of the other variables.
     #[serde(default, rename = "vars")]
-    pub variables: HashMap<String, Vec<String>>,
+    pub variables: IndexMap<String, Vec<String>>,
 
-    /// A set of possible *multi-variable mappings*. Think of this as a table:
-    /// The columns are varsets, the rows are definitions of varsets. Each cell
-    /// contains a 1:1 mapping of *multiple* variables, each one with a
-    /// singular value. For example:
-    ///
-    /// |servers              |vegetables                      |
-    /// |---------------------|--------------------------------|
-    /// |VAR1="dev",VAR2="dev"|VARA="tomato",VARB="potato"     |
-    /// |VAR1="prd",VAR2="prd"|VARA="eggplant",VARB="groundhog"|
-    ///
-    /// The user selects which *column* they care about as a command argument,
-    /// and they select which *row* within that column via the interactive
-    /// prompt.
-    ///
-    /// Note that for a single column, each cell *does not necessarily contain
-    /// the same set of variables*. Some may be omitted!
+    /// A set of named applications (as in, a use case, purpose, etc.). An
+    /// application typically has one or more variables that control it, and
+    /// each variable may multiple values to select between. Each value set
+    /// is known as a "profile".
     #[serde(default, rename = "apps")]
-    pub applications: HashMap<String, Application>,
+    pub applications: IndexMap<String, Application>,
 }
 
 impl Config {
@@ -104,7 +94,7 @@ impl Config {
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Application {
     #[serde(flatten)]
-    pub profiles: HashMap<String, Profile>,
+    pub profiles: IndexMap<String, Profile>,
 }
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
@@ -112,7 +102,7 @@ pub struct Application {
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Profile {
     #[serde(flatten)]
-    pub variables: HashMap<String, String>,
+    pub variables: IndexMap<String, String>,
 }
 
 /// Indicates that two values of this type can be merged together.
@@ -143,7 +133,7 @@ impl Merge for Profile {
     }
 }
 
-impl<K: Eq + Hash, V: Merge> Merge for HashMap<K, V> {
+impl<K: Eq + Hash, V: Merge> Merge for IndexMap<K, V> {
     fn merge(&mut self, other: Self) {
         for (k, other_v) in other {
             match self.entry(k) {

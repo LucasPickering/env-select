@@ -18,6 +18,7 @@ atty = "0.2.14"
 clap = {version = "4.0.17", features = ["derive"]}
 dialoguer = {version = "0.10.2", default-features = false}
 env_logger = {version = "0.9.1", default-features = false, features = ["atty", "termcolor"]}
+indexmap = {version = "1.9.1", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
 toml = {version = "0.5.9", default-features = false}
