@@ -1,4 +1,5 @@
 use crate::config::{Application, Profile};
+use anyhow::bail;
 use dialoguer::{theme::ColorfulTheme, Select};
 
 /// Show a prompt that allows the user to select a value for a variable, from
@@ -33,6 +34,11 @@ pub fn prompt_application(
     let theme = ColorfulTheme::default();
     let profiles: Vec<(&String, &Profile)> =
         application.profiles.iter().collect();
+
+    if profiles.is_empty() {
+        bail!("No profiles for this application");
+    }
+
     // Show a prompt to ask the user which value to use
     let chosen_index = Select::with_theme(&theme)
         .items(
