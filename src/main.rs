@@ -7,10 +7,10 @@ use crate::{
     console::{prompt_application, prompt_variable},
     shell::Shell,
 };
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use atty::Stream;
 use clap::Parser;
-use log::LevelFilter;
+use log::{error, LevelFilter};
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -21,8 +21,9 @@ struct Args {
     select_key: String,
 
     /// Profile to select. If not specified, an interactive prompt will be
-    /// shown to select between possible options. Only supported for
-    /// applications (not single variables).
+    /// shown to select between possible options.
+    ///
+    /// This also supports literal values for single variables.
     profile: Option<String>,
 
     /// Increase output verbosity, for debugging
@@ -31,7 +32,7 @@ struct Args {
     verbose: bool,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let args = Args::parse();
     env_logger::Builder::new()
         .format_timestamp(None)
@@ -43,24 +44,30 @@ fn main() -> anyhow::Result<()> {
             LevelFilter::Info
         })
         .init();
+    if let Err(error) = run(&args) {
+        // Print the error. Most of the time this is a user error, but this will
+        // also handle system errors or application bugs. The user should pass
+        // -v to get a stack trace for debugging.
+        if args.verbose {
+            error!("{error}\n{}", error.backtrace());
+        } else {
+            error!("{error}");
+        }
+    }
+}
+
+/// Fallible main function. If this errors out, it can be handled by `main`.
+fn run(args: &Args) -> anyhow::Result<()> {
     let config = Config::load()?;
     let shell = Shell::detect()?;
 
     // Figure out what commands we want to feed to the shell, based on input
-    let export_command = match get_export_command(
+    let export_command = get_export_command(
         &args.select_key,
         args.profile.as_deref(),
         &config,
         shell,
-    )? {
-        Some(export_command) => export_command,
-        None => {
-            bail!(
-                "No known variables or application by the name {}",
-                &args.select_key
-            );
-        }
-    };
+    )?;
 
     // Print the command(s) so the user can copy/pipe it to their shell
     print_export_command(shell, &export_command);
@@ -72,15 +79,12 @@ fn main() -> anyhow::Result<()> {
 /// gave, then use that to calculate the command(s) we want to feed to the shell
 /// to set the desired environment variables. This is basically the whole
 /// program.
-///
-/// Returns `Ok(None))` if the select key doesn't match any known variables or
-/// applications.
 fn get_export_command(
     select_key: &str,
     profile_name: Option<&str>,
     config: &Config,
     shell: Shell,
-) -> anyhow::Result<Option<String>> {
+) -> anyhow::Result<String> {
     // Check for single variable first
     if let Some(var_options) = config.variables.get(select_key) {
         let value = match profile_name {
@@ -93,7 +97,7 @@ fn get_export_command(
             None => prompt_variable(select_key, var_options)?,
         };
 
-        Ok(Some(shell.export_variable(select_key, value)))
+        Ok(shell.export_variable(select_key, value))
     }
     // Check for applications next
     else if let Some(application) = config.applications.get(select_key) {
@@ -118,10 +122,13 @@ fn get_export_command(
             None => prompt_application(application)?,
         };
 
-        Ok(Some(shell.export_profile(profile)))
+        Ok(shell.export_profile(profile))
     } else {
         // Didn't match anything :(
-        Ok(None)
+        Err(anyhow!(
+            "No known variable or application by the name {}",
+            select_key
+        ))
     }
 }
 
