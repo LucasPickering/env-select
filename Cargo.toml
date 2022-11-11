@@ -16,6 +16,7 @@ path = "src/main.rs"
 anyhow = {version = "1.0.65", features = ["backtrace"]}
 atty = "0.2.14"
 clap = {version = "4.0.17", features = ["derive"]}
+ctrlc = "3.2.3"
 dialoguer = {version = "0.10.2", default-features = false}
 env_logger = {version = "0.9.1", default-features = false, features = ["atty", "termcolor"]}
 indexmap = {version = "1.9.1", features = ["serde"]}

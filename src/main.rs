@@ -44,6 +44,7 @@ fn main() {
             LevelFilter::Info
         })
         .init();
+
     if let Err(error) = run(&args) {
         // Print the error. Most of the time this is a user error, but this will
         // also handle system errors or application bugs. The user should pass
@@ -58,6 +59,14 @@ fn main() {
 
 /// Fallible main function. If this errors out, it can be handled by `main`.
 fn run(args: &Args) -> anyhow::Result<()> {
+    // This handler will put the terminal cursor back if the user ctrl-c's
+    // during the interactive dialogue
+    // https://github.com/mitsuhiko/dialoguer/issues/77
+    ctrlc::set_handler(move || {
+        let term = dialoguer::console::Term::stdout();
+        let _ = term.show_cursor();
+    })?;
+
     let config = Config::load()?;
     let shell = Shell::detect()?;
 
