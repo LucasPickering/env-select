@@ -13,7 +13,7 @@ const FILE_NAME: &str = ".env-select.toml";
 /// Add configuration, as loaded from one or more config files. We use
 /// [indexmap::IndexMap] in here to preserve ordering from the input files.
 /// This (hopefully) makes usage more intuitive for the use.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct Config {
     /// A set of possible values for individual variables. Each variable maps
     /// to zero or more possible values, and the user can select from this
@@ -91,7 +91,7 @@ impl Config {
 /// An application is a grouping of profiles. Each profile should be different
 /// "versions" of the same "application", e.g. dev vs prd for the same service.
 /// Different colors of the same car, so to speak.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct Application {
     #[serde(flatten)]
     pub profiles: IndexMap<String, Profile>,
@@ -99,7 +99,7 @@ pub struct Application {
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct Profile {
     #[serde(flatten)]
     pub variables: IndexMap<String, String>,
@@ -149,5 +149,167 @@ impl<K: Eq + Hash, V: Merge> Merge for IndexMap<K, V> {
 impl<T> Merge for Vec<T> {
     fn merge(&mut self, other: Self) {
         self.extend(other)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indexmap::indexmap;
+
+    #[test]
+    fn test_vec_merge() {
+        let mut v1 = vec![1];
+        let v2 = vec![2];
+        v1.merge(v2);
+        assert_eq!(v1, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_map_merge() {
+        let mut map1 = indexmap! {
+            "a" => vec![1],
+            "b" => vec![2],
+        };
+        let map2 = indexmap! {
+            "a" => vec![3],
+            "c" => vec![4],
+        };
+        map1.merge(map2);
+        assert_eq!(
+            map1,
+            indexmap! {
+                "a" => vec![1,3],
+                "b" => vec![2],
+                "c" => vec![4],
+            }
+        );
+    }
+
+    #[test]
+    fn test_config_merge() {
+        let mut config1 = Config {
+            variables: indexmap! {
+                "VAR1".into() => vec!["val1".into(), "val2".into()],
+                "VAR2".into() => vec!["val1".into()],
+            },
+            applications: indexmap! {
+                "app1".into() => Application {
+                    profiles: indexmap! {
+                        "prof1".into() => Profile {
+                            variables: indexmap! {
+                                // Gets overwritten
+                                "VAR1".into() => "val1".into(),
+                                "VAR2".into() => "val2".into(),
+                            }
+                        },
+                        // No conflict
+                        "prof2".into() => Profile {
+                            variables: indexmap! {
+                                "VAR1".into() => "val11".into(),
+                                "VAR2".into() => "val22".into(),
+                            }
+                        },
+                    },
+                },
+                // No conflict
+                "app2".into() => Application {
+                    profiles: indexmap! {
+                        "prof1".into() => Profile {
+                            variables: indexmap! {
+                                "VAR1".into() => "val1".into(),
+                            }
+                        },
+                    },
+                },
+            },
+        };
+        let config2 = Config {
+            variables: indexmap! {
+                "VAR1".into() => vec!["val3".into()],
+            },
+            applications: indexmap! {
+                // Merged into existing
+                "app1".into() => Application {
+                    profiles: indexmap! {
+                        "prof1".into() => Profile {
+                            variables: indexmap! {
+                                // Overwrites
+                                "VAR1".into() => "val7".into(),
+                            }
+                        },
+                        // No conflict
+                        "prof3".into() => Profile {
+                            variables: indexmap! {
+                                "VAR1".into() => "val111".into(),
+                                "VAR2".into() => "val222".into(),
+                            }
+                        },
+                    },
+                },
+                // No conflict
+                "app3".into() => Application {
+                    profiles: indexmap! {
+                        "prof1".into() => Profile {
+                            variables: indexmap! {
+                                "VAR1".into() => "val11".into(),
+                            }
+                        },
+                    },
+                },
+            },
+        };
+        config1.merge(config2);
+        assert_eq!(
+            config1,
+            Config {
+                variables: indexmap! {
+                    "VAR1".into() => vec!["val1".into(), "val2".into(), "val3".into()],
+                    "VAR2".into() => vec!["val1".into()],
+                },
+                applications: indexmap! {
+                    "app1".into() => Application {
+                        profiles: indexmap! {
+                            "prof1".into() => Profile {
+                                variables: indexmap! {
+                                    "VAR1".into() => "val7".into(),
+                                    "VAR2".into() => "val2".into(),
+                                }
+                            },
+                            "prof2".into() => Profile {
+                                variables: indexmap! {
+                                    "VAR1".into() => "val11".into(),
+                                    "VAR2".into() => "val22".into(),
+                                }
+                            },
+                            "prof3".into() => Profile {
+                                variables: indexmap! {
+                                    "VAR1".into() => "val111".into(),
+                                    "VAR2".into() => "val222".into(),
+                                }
+                            },
+                        },
+                    },
+                    "app2".into() => Application {
+                        profiles: indexmap! {
+                            "prof1".into() => Profile {
+                                variables: indexmap! {
+                                    "VAR1".into() => "val1".into(),
+                                }
+                            },
+                        },
+                    },
+                    "app3".into() => Application {
+                        profiles: indexmap! {
+                            "prof1".into() => Profile {
+                                variables: indexmap! {
+                                    "VAR1".into() => "val11".into(),
+                                }
+                            },
+                        },
+                    },
+                },
+            }
+        );
     }
 }
