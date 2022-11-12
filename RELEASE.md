@@ -10,7 +10,7 @@ The release process for this tool is as follows:
 
 ```
 # Yes those are literal `v`s, as in "version"
-git commit Cargo.toml -m vx.y.z
+git commit Cargo.toml Cargo.lock -m vx.y.z
 git tag vx.y.z
 git push --tags
 ```
