@@ -6,6 +6,8 @@ keywords = ["env", "environment", "export"]
 license = "MIT"
 name = "env-select"
 repository = "https://github.com/LucasPickering/env-select"
+# Keep in sync w/ rust-toolchain.toml
+rust-version = "1.60"
 version = "0.1.1"
 
 [[bin]]

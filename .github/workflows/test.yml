@@ -1,0 +1,61 @@
+name: Lint & Test
+
+on:
+  push:
+    branches:
+      - master
+      - release
+  pull_request:
+
+jobs:
+  # This uses the toolchain defined in rust-toolchain, NOT what's defined above
+  fmt:
+    name: "Rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache cargo files
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Rustfmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  # Run clippy and tests. We just use the native target here and hope the results
+  # are the same for all others
+  lint-test:
+    name: "Lint & Test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache Rust files
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.rustup
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets --all-features -- -D clippy::all
+
+      - name: Tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
