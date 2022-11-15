@@ -1,8 +1,10 @@
+mod cli;
 mod config;
 mod console;
 mod shell;
 
 use crate::{
+    cli::Args,
     config::Config,
     console::{prompt_application, prompt_variable},
     shell::Shell,
@@ -11,26 +13,6 @@ use anyhow::anyhow;
 use atty::Stream;
 use clap::Parser;
 use log::{error, LevelFilter};
-
-/// A utility to select between predefined values or sets of environment
-/// variables.
-#[derive(Clone, Debug, Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// The name of the variable or application to select a value for
-    select_key: String,
-
-    /// Profile to select. If not specified, an interactive prompt will be
-    /// shown to select between possible options.
-    ///
-    /// This also supports literal values for single variables.
-    profile: Option<String>,
-
-    /// Increase output verbosity, for debugging
-    // TODO support multiple levels of verbosity
-    #[clap(short, long)]
-    verbose: bool,
-}
 
 fn main() {
     let args = Args::parse();

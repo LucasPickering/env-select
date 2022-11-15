@@ -25,3 +25,7 @@ indexmap = {version = "1.9.1", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
 toml = {version = "0.5.9", default-features = false}
+
+[build-dependencies]
+clap = {version = "4.0.17", features = ["derive"]}
+clap_complete = "4.0.5"

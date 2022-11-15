@@ -5,6 +5,9 @@ use std::{env, ffi::OsStr, path::PathBuf};
 /// A known shell type. We can use this to export variables.
 #[derive(Copy, Clone, Debug)]
 pub enum Shell {
+    // If you add a supported shell here, make sure to:
+    // - Update the docs (README)
+    // - Add shell completions in build.rs
     Bash,
     Zsh,
     Fish,
