@@ -7,7 +7,7 @@ license = "MIT"
 name = "env-select"
 repository = "https://github.com/LucasPickering/env-select"
 # Keep in sync w/ rust-toolchain.toml
-rust-version = "1.60"
+rust-version = "1.67.1"
 version = "0.2.0"
 
 [[bin]]
