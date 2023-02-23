@@ -34,15 +34,25 @@ dev also-dev
 
 ## Concepts
 
-env-select operates with a few different buildings blocks:
+env-select operates with a few different building blocks:
 
+- Value
 - Variable Mapping
 - Profile
 - Application
 
+### Value
+
+A value is a means of deriving a string for the shell. Typically this is just a literal string: `"abc"`, but it can also be a command that will be evaluated to a string at runtime.
+
+```sh
+dev # Literal
+$(echo prd) # Command
+```
+
 ### Variable Mapping
 
-A variable mapping an environment variable with a value. A key and a value. Variables can either be selected independently (via the `vars` key in the config) or be part of a profile with other variables.
+A key and a value. Variables can either be selected independently (via the `vars` key in the config) or be part of a profile with other variables.
 
 ```sh
 SERVICE1=dev
@@ -133,6 +143,8 @@ dev also-dev
 
 Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
 
+TODO add command usage
+
 - Single variables, under the `vars` key
   - Each table entry is a mapping from `VARIABLE_NAME` to a list of possible values
 - [Applications](#application), under the `apps` key
@@ -172,6 +184,19 @@ VAR3 = "no"
 VAR4 = "yes"
 VAR5 = "no"
 ```
+
+### Dynamic Values
+
+You can define variables whose values are provided dynamically, by specific a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
+
+```toml
+[apps.db]
+dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt"}}
+```
+
+When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`.
+
+Note that **the command evaluation is done by your shell**, _not_ by `env-select`. This means you can use aliases and functions defined in your shell as commands.
 
 ### Disjoint Profiles
 

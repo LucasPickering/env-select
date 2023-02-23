@@ -3,7 +3,7 @@ mod console;
 mod shell;
 
 use crate::{
-    config::Config,
+    config::{Config, Value},
     console::{prompt_application, prompt_variable},
     shell::Shell,
 };
@@ -101,12 +101,12 @@ fn get_export_command(
             // a single value? You could just run the shell command directly...
             // Regardless, we might as well support this instead of ignoring it
             // or throwing an error
-            Some(profile_name) => profile_name,
+            Some(value) => Value::Literal(value.into()),
             // The standard use case - prompt the user to pick a value
-            None => prompt_variable(select_key, var_options)?,
+            None => prompt_variable(select_key, var_options)?.clone(),
         };
 
-        Ok(shell.export_variable(select_key, value))
+        Ok(shell.export_variable(select_key, &value))
     }
     // Check for applications next
     else if let Some(application) = config.applications.get(select_key) {

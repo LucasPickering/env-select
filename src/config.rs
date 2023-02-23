@@ -1,9 +1,11 @@
 use anyhow::Context;
-use indexmap::{map::Entry, IndexMap};
+use indexmap::{map::Entry, IndexMap, IndexSet};
 use log::{debug, error, trace};
 use serde::Deserialize;
 use std::{
-    env, fs,
+    env,
+    fmt::Display,
+    fs,
     hash::Hash,
     path::{Path, PathBuf},
 };
@@ -17,9 +19,11 @@ const FILE_NAME: &str = ".env-select.toml";
 pub struct Config {
     /// A set of possible values for individual variables. Each variable maps
     /// to zero or more possible values, and the user can select from this
-    /// list for each variable *independently* of the other variables.
+    /// list for each variable *independently* of the other variables. We use
+    /// an ordered set here so the ordering from the user's file(s) is
+    /// maintained, but without duplicates.
     #[serde(default, rename = "vars")]
-    pub variables: IndexMap<String, Vec<String>>,
+    pub variables: IndexMap<String, IndexSet<Value>>,
 
     /// A set of named applications (as in, a use case, purpose, etc.). An
     /// application typically has one or more variables that control it, and
@@ -51,15 +55,6 @@ impl Config {
                     error!("{path:?} will be ignored due to error: {error}")
                 }
             }
-        }
-
-        // Sort each variable's options then remove duplicates
-        // We may want to maintain the original order instead of sorting, but
-        // let's stick with sorting for now because it feels intuitive and
-        // makes deduping easy
-        for options in config.variables.values_mut() {
-            options.sort();
-            options.dedup(); // This requires the vec to be sorted!
         }
 
         debug!("Loaded config: {config:#?}");
@@ -102,7 +97,32 @@ pub struct Application {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 pub struct Profile {
     #[serde(flatten)]
-    pub variables: IndexMap<String, String>,
+    pub variables: IndexMap<String, Value>,
+}
+
+/// A variable's value. Can be a literal value, or an embedded command, which
+/// will be evaluated into a value lazily.
+///
+/// The variant structure here is important for deserialization. A single string
+/// should be interpreted as a literal, because that's the most common case.
+/// An object should be treated as other variants, based on the field structure.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[serde(untagged)]
+pub enum Value {
+    /// A plain string value
+    Literal(String),
+    /// A command that will be executed at runtime to get the variable's value.
+    /// Useful for values that change, secrets, etc.
+    Command { command: String },
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Literal(value) => write!(f, "{value}"),
+            Value::Command { command } => write!(f, "`{command}`"),
+        }
+    }
 }
 
 /// Indicates that two values of this type can be merged together.
@@ -133,6 +153,12 @@ impl Merge for Profile {
     }
 }
 
+impl<T: Eq + Hash> Merge for IndexSet<T> {
+    fn merge(&mut self, other: Self) {
+        self.extend(other)
+    }
+}
+
 impl<K: Eq + Hash, V: Merge> Merge for IndexMap<K, V> {
     fn merge(&mut self, other: Self) {
         for (k, other_v) in other {
@@ -146,42 +172,42 @@ impl<K: Eq + Hash, V: Merge> Merge for IndexMap<K, V> {
     }
 }
 
-impl<T> Merge for Vec<T> {
-    fn merge(&mut self, other: Self) {
-        self.extend(other)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indexmap::indexmap;
+    use indexmap::{indexmap, indexset};
+
+    impl From<&str> for Value {
+        fn from(s: &str) -> Self {
+            Value::Literal(s.into())
+        }
+    }
 
     #[test]
-    fn test_vec_merge() {
-        let mut v1 = vec![1];
-        let v2 = vec![2];
+    fn test_set_merge() {
+        let mut v1 = indexset! {1};
+        let v2 = indexset! {2, 1};
         v1.merge(v2);
-        assert_eq!(v1, vec![1, 2]);
+        assert_eq!(v1, indexset! {1, 2});
     }
 
     #[test]
     fn test_map_merge() {
         let mut map1 = indexmap! {
-            "a" => vec![1],
-            "b" => vec![2],
+            "a" => indexset!{1},
+            "b" => indexset!{2},
         };
         let map2 = indexmap! {
-            "a" => vec![3],
-            "c" => vec![4],
+            "a" => indexset!{3},
+            "c" => indexset!{4},
         };
         map1.merge(map2);
         assert_eq!(
             map1,
             indexmap! {
-                "a" => vec![1,3],
-                "b" => vec![2],
-                "c" => vec![4],
+                "a" => indexset!{1,3},
+                "b" => indexset!{2},
+                "c" => indexset!{4},
             }
         );
     }
@@ -190,8 +216,8 @@ mod tests {
     fn test_config_merge() {
         let mut config1 = Config {
             variables: indexmap! {
-                "VAR1".into() => vec!["val1".into(), "val2".into()],
-                "VAR2".into() => vec!["val1".into()],
+                "VAR1".into() => indexset!{"val1".into(), "val2".into()},
+                "VAR2".into() => indexset!{"val1".into()},
             },
             applications: indexmap! {
                 "app1".into() => Application {
@@ -226,7 +252,7 @@ mod tests {
         };
         let config2 = Config {
             variables: indexmap! {
-                "VAR1".into() => vec!["val3".into()],
+                "VAR1".into() => indexset!{"val3".into()},
             },
             applications: indexmap! {
                 // Merged into existing
@@ -264,8 +290,8 @@ mod tests {
             config1,
             Config {
                 variables: indexmap! {
-                    "VAR1".into() => vec!["val1".into(), "val2".into(), "val3".into()],
-                    "VAR2".into() => vec!["val1".into()],
+                    "VAR1".into() => indexset!{"val1".into(), "val2".into(), "val3".into()},
+                    "VAR2".into() => indexset!{"val1".into()},
                 },
                 applications: indexmap! {
                     "app1".into() => Application {

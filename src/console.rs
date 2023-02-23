@@ -1,14 +1,15 @@
-use crate::config::{Application, Profile};
+use crate::config::{Application, Profile, Value};
 use anyhow::bail;
 use dialoguer::{theme::ColorfulTheme, Select};
+use indexmap::IndexSet;
 
 /// Show a prompt that allows the user to select a value for a variable, from
 /// a given list. The user can also select a "Custom" option to enter their own
 /// value. Returns `Ok(None)` iff the user quits out of the prompt.
 pub fn prompt_variable<'a>(
     variable: &str,
-    options: &'a [String],
-) -> anyhow::Result<&'a str> {
+    options: &'a IndexSet<Value>,
+) -> anyhow::Result<&'a Value> {
     let theme = ColorfulTheme::default();
     // Show a prompt to ask the user which value to use
     let chosen_index = Select::with_theme(&theme)
