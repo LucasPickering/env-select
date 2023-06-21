@@ -61,6 +61,25 @@ impl Config {
         Ok(config)
     }
 
+    /// Get a friendly string suggesting available select keys
+    pub fn get_select_key_suggestion(&self) -> String {
+        format!(
+            "Try one of the following:
+    Variables: {}
+    Applications: {}",
+            self.variables
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.applications
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    }
+
     /// Starting at the current directory, walk *up* the tree and collect the
     /// list of all config files.
     fn get_all_files() -> anyhow::Result<Vec<PathBuf>> {

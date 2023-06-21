@@ -19,7 +19,7 @@ use std::process::ExitCode;
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The name of the variable or application to select a value for
-    select_key: String,
+    select_key: Option<String>,
 
     /// Profile to select. If not specified, an interactive prompt will be
     /// shown to select between possible options.
@@ -75,18 +75,26 @@ fn run(args: &Args) -> anyhow::Result<()> {
     let config = Config::load()?;
     let shell = Shell::detect()?;
 
-    // Figure out what commands we want to feed to the shell, based on input
-    let export_command = get_export_command(
-        &args.select_key,
-        args.profile.as_deref(),
-        &config,
-        shell,
-    )?;
+    match &args.select_key {
+        Some(select_key) => {
+            // Figure out what commands we want to feed to the shell, based on
+            // input
+            let export_command = get_export_command(
+                select_key,
+                args.profile.as_deref(),
+                &config,
+                shell,
+            )?;
 
-    // Print the command(s) so the user can copy/pipe it to their shell
-    print_export_command(shell, &export_command);
-
-    Ok(())
+            // Print the command(s) so the user can copy/pipe it to their shell
+            print_export_command(shell, &export_command);
+            Ok(())
+        }
+        None => Err(anyhow!(
+            "No variable or application provided. {}",
+            config.get_select_key_suggestion()
+        )),
+    }
 }
 
 /// Prompt the user to select a value/profile for the variable/application they
@@ -140,8 +148,9 @@ fn get_export_command(
     } else {
         // Didn't match anything :(
         Err(anyhow!(
-            "No known variable or application by the name {}",
-            select_key
+            "No known variable or application by the name `{}`. {}",
+            select_key,
+            config.get_select_key_suggestion()
         ))
     }
 }
