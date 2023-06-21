@@ -11,7 +11,7 @@ use anyhow::anyhow;
 use atty::Stream;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::process::ExitCode;
+use std::{env, process::ExitCode};
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -192,7 +192,11 @@ fn print_export_command(shell: Shell, export_command: &str) {
             "  HINT: Pipe command output to `{}` to apply values automatically",
             shell.source_command()
         );
-        println!("  E.g. `es VARIABLE | {}`", shell.source_command());
+        println!(
+            "  E.g. `{} VARIABLE | {}`",
+            env::args().next().unwrap_or("env-select".into()),
+            shell.source_command()
+        );
         println!("Run the command(s) below to apply variables changes:");
         println!();
     }
