@@ -47,7 +47,7 @@ impl Shell {
             Self::Bash | Self::Zsh => {
                 format!("export '{variable}'={value}")
             }
-            Self::Fish => format!("set -x '{variable}' {value}"),
+            Self::Fish => format!("set -gx '{variable}' {value}"),
         }
     }
 

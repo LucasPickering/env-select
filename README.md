@@ -32,6 +32,12 @@ dev also-dev
 
 (See [the disclaimer](#source-disclaimer) for why piping to `source` is needed)
 
+## Installation
+
+```sh
+cargo install env-select
+```
+
 ## Concepts
 
 env-select operates with a few different building blocks:
