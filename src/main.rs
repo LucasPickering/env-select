@@ -11,6 +11,7 @@ use anyhow::anyhow;
 use atty::Stream;
 use clap::Parser;
 use log::{error, LevelFilter};
+use std::process::ExitCode;
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -32,7 +33,7 @@ struct Args {
     verbose: bool,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
     env_logger::Builder::new()
         .format_timestamp(None)
@@ -45,14 +46,18 @@ fn main() {
         })
         .init();
 
-    if let Err(error) = run(&args) {
-        // Print the error. Most of the time this is a user error, but this will
-        // also handle system errors or application bugs. The user should pass
-        // -v to get a stack trace for debugging.
-        if args.verbose {
-            error!("{error}\n{}", error.backtrace());
-        } else {
-            error!("{error}");
+    match run(&args) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            // Print the error. Most of the time this is a user error, but this
+            // will also handle system errors or application bugs. The user
+            // should pass -v to get a stack trace for debugging.
+            if args.verbose {
+                error!("{error}\n{}", error.backtrace());
+            } else {
+                error!("{error}");
+            }
+            ExitCode::FAILURE
         }
     }
 }
