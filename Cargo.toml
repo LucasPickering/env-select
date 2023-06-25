@@ -24,4 +24,4 @@ env_logger = {version = "0.9.1", default-features = false, features = ["atty", "
 indexmap = {version = "1.9.1", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
-toml = {version = "0.5.9", default-features = false}
+toml = "0.7.5"

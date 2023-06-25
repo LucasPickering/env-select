@@ -1,7 +1,7 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use indexmap::{map::Entry, IndexMap, IndexSet};
 use log::{debug, error, trace};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     env,
     fmt::Display,
@@ -15,7 +15,7 @@ const FILE_NAME: &str = ".env-select.toml";
 /// Add configuration, as loaded from one or more config files. We use
 /// [indexmap::IndexMap] in here to preserve ordering from the input files.
 /// This (hopefully) makes usage more intuitive for the use.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Config {
     /// A set of possible values for individual variables. Each variable maps
     /// to zero or more possible values, and the user can select from this
@@ -61,12 +61,15 @@ impl Config {
         Ok(config)
     }
 
-    /// Get a friendly string suggesting available select keys
-    pub fn get_select_key_suggestion(&self) -> String {
-        format!(
-            "Try one of the following:
+    /// Build an error that contains a suggestion of all available variables and
+    /// profiles
+    pub fn get_suggestion_error(&self, message: &str) -> anyhow::Error {
+        anyhow!(
+            "{}
+Try one of the following:
     Variables: {}
     Applications: {}",
+            message,
             self.variables
                 .keys()
                 .cloned()
@@ -105,7 +108,7 @@ impl Config {
 /// An application is a grouping of profiles. Each profile should be different
 /// "versions" of the same "application", e.g. dev vs prd for the same service.
 /// Different colors of the same car, so to speak.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Application {
     #[serde(flatten)]
     pub profiles: IndexMap<String, Profile>,
@@ -113,7 +116,7 @@ pub struct Application {
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Profile {
     #[serde(flatten)]
     pub variables: IndexMap<String, Value>,
@@ -125,7 +128,7 @@ pub struct Profile {
 /// The variant structure here is important for deserialization. A single string
 /// should be interpreted as a literal, because that's the most common case.
 /// An object should be treated as other variants, based on the field structure.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(untagged)]
 pub enum Value {
     /// A plain string value

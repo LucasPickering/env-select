@@ -40,6 +40,10 @@ enum Commands {
         /// This also supports literal values for single variables.
         profile: Option<String>,
     },
+
+    /// Show current configuration, with all available variables and
+    /// applications
+    Show,
 }
 
 fn main() -> ExitCode {
@@ -105,11 +109,14 @@ fn run(args: &Args) -> anyhow::Result<()> {
                     print_export_command(shell, &export_command);
                     Ok(())
                 }
-                None => Err(anyhow!(
+                None => Err(config.get_suggestion_error(
                     "No variable or application provided. {}",
-                    config.get_select_key_suggestion()
                 )),
             }
+        }
+        Commands::Show => {
+            println!("{}", toml::to_string(&config)?);
+            Ok(())
         }
     }
 }
@@ -164,10 +171,8 @@ fn get_export_command(
         Ok(shell.export_profile(profile))
     } else {
         // Didn't match anything :(
-        Err(anyhow!(
+        Err(config.get_suggestion_error(
             "No known variable or application by the name `{}`. {}",
-            select_key,
-            config.get_select_key_suggestion()
         ))
     }
 }
