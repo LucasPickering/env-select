@@ -1,11 +1,9 @@
 use crate::{
     config::{Config, Value},
-    console::{prompt_application, prompt_variable},
+    console,
     shell::Shell,
 };
 use anyhow::anyhow;
-use atty::Stream;
-use std::env;
 
 /// Container to handle user selection and command generation. This is the core
 /// logic for the program.
@@ -28,29 +26,8 @@ impl Exporter {
         profile: Option<&str>,
     ) -> anyhow::Result<()> {
         let export_command = self.get_export_commands(select_key, profile)?;
-
-        // If stdout isn't redirected, then tell the user how to do that
-        // for OPTIMAL PERFORMANCE GAINS
-        if atty::is(Stream::Stdout) {
-            // Normally we don't want to print anything to stdout except for the
-            // commands, but in this case we know that stdout isn't being piped
-            // anywhere, so it's safe to send regular output there. That way, if
-            // the user happens to be piping stderr somewhere, they still see
-            // this warning.
-            println!(
-            "  HINT: Pipe command output to `{}` to apply values automatically",
-            self.shell.source_command()
-        );
-            println!(
-                "  E.g. `{} VARIABLE | {}`",
-                env::args().next().unwrap_or("env-select".into()),
-                self.shell.source_command()
-            );
-            println!("Run the command(s) below to apply variables changes:");
-            println!();
-        }
-
         println!("{}", export_command);
+        console::print_installation_hint()?;
         Ok(())
     }
 
@@ -73,7 +50,9 @@ impl Exporter {
                 // or throwing an error
                 Some(value) => Value::Literal(value.into()),
                 // The standard use case - prompt the user to pick a value
-                None => prompt_variable(select_key, var_options)?.clone(),
+                None => {
+                    console::prompt_variable(select_key, var_options)?.clone()
+                }
             };
 
             Ok(self.shell.export_variable(select_key, &value))
@@ -100,7 +79,7 @@ impl Exporter {
                     })?
                 }
                 // Show a prompt to ask the user which varset to use
-                None => prompt_application(application)?,
+                None => console::prompt_application(application)?,
             };
 
             Ok(self.shell.export_profile(profile))

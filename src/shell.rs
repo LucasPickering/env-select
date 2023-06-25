@@ -1,7 +1,19 @@
-use crate::config::{Profile, Value};
+use crate::{
+    config::{Profile, Value},
+    console,
+};
 use anyhow::anyhow;
 use clap::ValueEnum;
-use std::{env, ffi::OsStr, path::PathBuf};
+use std::{
+    env,
+    ffi::OsStr,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+};
+
+const BASH_WRAPPER: &str = include_str!("../shells/es.bash");
+const ZSH_WRAPPER: &str = include_str!("../shells/es.zsh");
+const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 
 /// A known shell type. We can use this to export variables.
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -28,12 +40,20 @@ impl Shell {
             .map_err(|message| anyhow!("{}", message))
     }
 
-    /// Get the command that this shell uses to ingest variables into the
-    /// present shell context.
-    pub fn source_command(&self) -> &str {
-        match self {
-            Self::Bash | Self::Zsh | Self::Fish => "source",
-        }
+    /// Print a valid shell script that will initialize the `es` wrapper as
+    /// well as whatever other initialization is needed.
+    pub fn print_init_script(&self) -> anyhow::Result<()> {
+        let wrapper_src = match self {
+            Self::Bash => BASH_WRAPPER,
+            Self::Zsh => ZSH_WRAPPER,
+            Self::Fish => FISH_WRAPPER,
+        };
+
+        println!("{wrapper_src}");
+
+        console::print_installation_hint()?;
+
+        Ok(())
     }
 
     /// Get the shell command that will set a variable to a particular value for
@@ -78,5 +98,15 @@ impl Shell {
             .map(|(variable, value)| self.export_variable(variable, value))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+impl Display for Shell {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shell::Bash => write!(f, "bash"),
+            Shell::Zsh => write!(f, "zsh"),
+            Shell::Fish => write!(f, "fish"),
+        }
     }
 }

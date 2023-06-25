@@ -24,6 +24,7 @@ env_logger = {version = "0.9.1", default-features = false, features = ["atty", "
 indexmap = {version = "2.0.0", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
+termcolor = "1.2.0"
 toml = {version = "0.7.5", features = ["preserve_order"]}
 
 [package.metadata.release]
