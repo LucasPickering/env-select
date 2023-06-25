@@ -1,5 +1,3 @@
-# TODO document this in the README
-
 function es --description "Fish wrapper for env-select"
     # Check env-select is installed
     if not type -q env-select
