@@ -21,10 +21,9 @@ struct Args {
     #[command(subcommand)]
     command: Commands,
 
-    /// Increase output verbosity, for debugging
-    // TODO support multiple levels of verbosity
-    #[clap(short, long)]
-    verbose: bool,
+    /// Increase output verbosity, for debugging. Supports up to -vv
+    #[clap(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -52,10 +51,10 @@ fn main() -> ExitCode {
         .format_timestamp(None)
         .format_module_path(false)
         .format_target(false)
-        .filter_level(if args.verbose {
-            LevelFilter::Trace
-        } else {
-            LevelFilter::Info
+        .filter_level(match args.verbose {
+            0 => LevelFilter::Info,
+            1 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
         })
         .init();
 
@@ -65,7 +64,7 @@ fn main() -> ExitCode {
             // Print the error. Most of the time this is a user error, but this
             // will also handle system errors or application bugs. The user
             // should pass -v to get a stack trace for debugging.
-            if args.verbose {
+            if args.verbose > 0 {
                 error!("{error}\n{}", error.backtrace());
             } else {
                 error!("{error}");
