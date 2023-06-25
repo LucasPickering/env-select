@@ -8,6 +8,13 @@ Easily switch between predefined values for arbitrary environment variables Feat
 - Interative prompts to select between variable profiles
 - Cascading config system, allowing for system and repo-level value definitions
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Usage Guide](USAGE.md)
+- [Disclaimer](#source-disclaimer)
+- [Bugs/Feedback](#bugsfeedback)
+
 ## Simple Example
 
 ```toml
@@ -18,7 +25,7 @@ prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
 
 ```sh
-> es set server | source
+> es set server
 ❯ === dev ===
 SERVICE1=dev
 SERVICE2=also-dev
@@ -34,246 +41,41 @@ dev also-dev
 
 ## Installation
 
+env-select has two components: the main binary and the shell plugins. Currently the binary can only be installed via `cargo`:
+
 ```sh
 cargo install env-select
 ```
 
-## Concepts
+The shell plugins are not required, but make usage easier. Otherwise, you have to manually pipe the output of each `env-select` invocation to `source`.
 
-env-select operates with a few different building blocks:
+**All commands in this README assume you have the appropriate shell plugin installed.** If you don't replace any command `es ...` with `env-select ... | source`.
 
-- Value
-- Variable Mapping
-- Profile
-- Application
+### Fish
 
-### Value
-
-A value is a means of deriving a string for the shell. Typically this is just a literal string: `"abc"`, but it can also be a command that will be evaluated to a string at runtime.
+The easiest way to install is with [fisher](https://github.com/jorgebucaran/fisher).
 
 ```sh
-dev # Literal
-$(echo prd) # Command
+fisher install LucasPickering/env-select
 ```
 
-### Variable Mapping
-
-A key and a value. Variables can either be selected independently (via the `vars` key in the config) or be part of a profile with other variables.
+Or install manually:
 
 ```sh
-SERVICE1=dev
+curl https://raw.githubusercontent.com/LucasPickering/env-select/master/functions/es.fish -o ~/.config/fish/functions/es.fish
 ```
 
-### Profile
+### Bash/Zsh
 
-A profile is a set of variable mappings.
-
-```sh
-SERVICE1=dev
-SERVICE2=also-dev
-```
-
-### Application
-
-An application is a group. "Application" in this case is a synonym for "use case" or "purpose". Each profile in an application accomplishes different versions of the same goal.
-
-```sh
-# dev
-SERVICE1=dev
-SERVICE2=also-dev
-
-# prd
-SERVICE1=prd
-SERVICE2=also-prd
-```
-
-## Usage
-
-First, define `.env-select.toml`. This is where you'll specify possible options for each variable. Here's an example:
-
-```toml
-[vars]
-TEST_VARIABLE = ["abc", "def"]
-
-[apps.server]
-dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
-prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-
-[apps.db]
-dev = {DATABASE = "dev", DB_USER = "root",  DB_PASSWORD = "badpw"}
-stg = {DATABASE = "stg", DB_USER = "root", DB_PASSWORD = "goodpw"}
-prd = {DATABASE = "prd", DB_USER = "root", DB_PASSWORD = "greatpw"}
-```
-
-Now, you can easily switch between the defined values with `es`.
-
-### Select a single variable
-
-We can select between multiple values for a single variable, in this case `TEST_VARIABLE`. This is a shorthand for defining an application with multiple single-variable profiles.
-
-```sh
-> es set TEST_VARIABLE | source
-  TEST_VARIABLE=abc
-❯ TEST_VARIABLE=def
-> echo $TEST_VARIABLE
-def
-```
-
-### Select a set of variables
-
-In the config above, we've already predefined an application called `server`, which consists of two profiles, `dev` and `prd`. We can select between those profiles by providing the _application_ name.
-
-```sh
-> es set server | source
-❯ === dev ===
-SERVICE1=dev
-SERVICE2=also-dev
-
-  === prd ===
-SERVICE1=prd
-SERVICE2=also-prd
-
-> echo $SERVICE1 $SERVICE2
-dev also-dev
-```
-
-If you know the name of the profile you want to select, you can also skip the prompt by providing it directly to the command:
-
-```sh
-> es set server dev | source
-> echo $SERVICE1 $SERVICE2
-dev also-dev
-```
-
-## Configuration
-
-Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
-
-- Single variables, under the `vars` key
-  - Each table entry is a mapping from `VARIABLE_NAME` to a list of possible values
-- [Applications](#application), under the `apps` key
-  - Sub-tables define each [profiles](#profile)
-  - Each profile consists of a mapping of `VARIABLE = "value"`
-
-Let's see this in action:
-
-```toml
-# Single variables
-[vars]
-TEST_VARIABLE = ["abc", "def"]
-OTHER_VARIABLE = ["potato", "tomato"]
-
-# Applications
-[apps.server]
-dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
-prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-
-# This application has no profiles, but is still valid to configure
-[apps.empty]
-
-# These profiles are big, so we can use full table syntax instead of the
-# inline syntax. This is purely stylistic; you can make your inline
-# tables as big as your heart desires. See https://toml.io/en/v1.0.0#table
-[apps.big.prof1]
-VAR1 = "yes"
-VAR2 = "yes"
-VAR3 = "no"
-VAR4 = "no"
-VAR5 = "yes"
-
-[apps.big.prof2]
-VAR1 = "no"
-VAR2 = "no"
-VAR3 = "no"
-VAR4 = "yes"
-VAR5 = "no"
-```
-
-### Dynamic Values
-
-You can define variables whose values are provided dynamically, by specific a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
-
-```toml
-[apps.db]
-dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt"}}
-```
-
-When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`.
-
-Note that **the command evaluation is done by your shell**, _not_ by `env-select`. This means you can use aliases and functions defined in your shell as commands.
-
-### Disjoint Profiles
-
-Profiles within an app can define differing sets of variables, like so:
-
-```toml
-[apps.db]
-dev = {DATABASE = "dev", DB_USER = "root"}
-stg = {DATABASE = "stg", DB_USER = "root", DB_PASSWORD = "goodpw"}
-prd = {DATABASE = "prd", DB_USER = "root", DB_PASSWORD = "greatpw"}
-```
-
-The `dev` profile excludes the `DB_PASSWORD` variable. Beware though, whenever switch to the dev profile, it will simply not output a value for `DB_PASSWORD`. That means if you're switch from another profile, `DB_PASSWORD` will retain its old value! For this reason, it's generally best to define the same set of values for every profile in an app, and just use empty values as appropriate.
-
-### Cascading configs
-
-On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es set TEST_VARIABLE` in `~/code/`:
-
-```toml
-# ~/code/.env-select.toml
-[vars]
-TEST_VARIABLE = ["abc", "def"]
-
-[apps.server]
-dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
-```
-
-```toml
-# ~/.env-select.toml
-[vars]
-TEST_VARIABLE = ["ghi"]
-OTHER_VARIABLE = ["potato", "tomato"]
-
-[apps.server]
-dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
-prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-```
-
-then our resulting config, at execution time, will look like:
-
-```toml
-# Note: this config never exists in the file system, only in memory during program execution
-[vars]
-# Variable lists get appended together
-TEST_VARIABLE = ["abc", "def", "ghi"]
-OTHER_VARIABLE = ["potato", "tomato"]
-
-[apps.server]
-# From ~/code/.env-select.toml (higher precedence)
-dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
-# From ~/.env-select.toml (no value in ~/code/.env-select.toml)
-prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-```
-
-To see where env-select is loading configs from, and how they are being merged together, run the command with the `--verbose` (or `-v`) flag.
-
-## Shell Support
-
-env-select supports the following shells:
-
-- bash
-- zsh
-- fish
-
-If you use a different shell and would like support for it, please open an issue and I'll see what I can do!
+Coming Soon™
 
 ## `source` Disclaimer
 
-env-select runs as a subprocess to your shell (as all commands do), meaning it cannot modify your shell environment. To get around this, env-select will simply output shell commands that you can then pipe to `source` to modify your session.
+env-select runs as a subprocess to your shell (as all commands do), meaning it cannot modify your shell environment. To get around this, env-select will simply output shell commands that the shell plugins (or you) can then pipe to `source` to modify your session.
 
 If you think piping stuff to `source` is dangerous and sPoOky, you're right. But consider the fact that at this point, you've already downloaded and executed a mystery binary on your machine. You should've already done your due diligence.
 
-Alternatively, you can run the command without piping to `source`, and it will simply print out the commands to modify your environment, which you can copy-paste to run manually.
+Alternatively, you can run `env-select` without piping to `source`, and it will simply print out the commands to modify your environment, which you can copy-paste to run manually.
 
 ## Bugs/Feedback
 
