@@ -18,7 +18,7 @@ prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
 
 ```sh
-> es server | source
+> es set server | source
 ❯ === dev ===
 SERVICE1=dev
 SERVICE2=also-dev
@@ -106,7 +106,7 @@ Now, you can easily switch between the defined values with `es`.
 We can select between multiple values for a single variable, in this case `TEST_VARIABLE`. This is a shorthand for defining an application with multiple single-variable profiles.
 
 ```sh
-> es TEST_VARIABLE | source
+> es set TEST_VARIABLE | source
   TEST_VARIABLE=abc
 ❯ TEST_VARIABLE=def
 > echo $TEST_VARIABLE
@@ -118,7 +118,7 @@ def
 In the config above, we've already predefined an application called `server`, which consists of two profiles, `dev` and `prd`. We can select between those profiles by providing the _application_ name.
 
 ```sh
-> es server | source
+> es set server | source
 ❯ === dev ===
 SERVICE1=dev
 SERVICE2=also-dev
@@ -134,7 +134,7 @@ dev also-dev
 If you know the name of the profile you want to select, you can also skip the prompt by providing it directly to the command:
 
 ```sh
-> es server dev | source
+> es set server dev | source
 > echo $SERVICE1 $SERVICE2
 dev also-dev
 ```
@@ -142,8 +142,6 @@ dev also-dev
 ## Configuration
 
 Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
-
-TODO add command usage
 
 - Single variables, under the `vars` key
   - Each table entry is a mapping from `VARIABLE_NAME` to a list of possible values
@@ -213,7 +211,7 @@ The `dev` profile excludes the `DB_PASSWORD` variable. Beware though, whenever s
 
 ### Cascading configs
 
-On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es TEST_VARIABLE` in `~/code/`:
+On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es set TEST_VARIABLE` in `~/code/`:
 
 ```toml
 # ~/code/.env-select.toml

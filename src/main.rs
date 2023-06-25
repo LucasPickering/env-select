@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use atty::Stream;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use std::process::ExitCode;
 
@@ -18,19 +18,28 @@ use std::process::ExitCode;
 #[derive(Clone, Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// The name of the variable or application to select a value for
-    select_key: Option<String>,
-
-    /// Profile to select. If not specified, an interactive prompt will be
-    /// shown to select between possible options.
-    ///
-    /// This also supports literal values for single variables.
-    profile: Option<String>,
+    #[command(subcommand)]
+    command: Commands,
 
     /// Increase output verbosity, for debugging
     // TODO support multiple levels of verbosity
     #[clap(short, long)]
     verbose: bool,
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum Commands {
+    /// Modify environment from a variable or application name
+    Set {
+        /// The name of the variable or application to select a value for
+        select_key: Option<String>,
+
+        /// Profile to select. If not specified, an interactive prompt will be
+        /// shown to select between possible options.
+        ///
+        /// This also supports literal values for single variables.
+        profile: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -75,25 +84,33 @@ fn run(args: &Args) -> anyhow::Result<()> {
     let config = Config::load()?;
     let shell = Shell::detect()?;
 
-    match &args.select_key {
-        Some(select_key) => {
-            // Figure out what commands we want to feed to the shell, based on
-            // input
-            let export_command = get_export_command(
-                select_key,
-                args.profile.as_deref(),
-                &config,
-                shell,
-            )?;
+    match &args.command {
+        Commands::Set {
+            select_key,
+            profile,
+        } => {
+            match select_key {
+                Some(select_key) => {
+                    // Figure out what commands we want to feed to the shell,
+                    // based on input
+                    let export_command = get_export_command(
+                        select_key,
+                        profile.as_deref(),
+                        &config,
+                        shell,
+                    )?;
 
-            // Print the command(s) so the user can copy/pipe it to their shell
-            print_export_command(shell, &export_command);
-            Ok(())
+                    // Print the command(s) so the user can copy/pipe it to
+                    // their shell
+                    print_export_command(shell, &export_command);
+                    Ok(())
+                }
+                None => Err(anyhow!(
+                    "No variable or application provided. {}",
+                    config.get_select_key_suggestion()
+                )),
+            }
         }
-        None => Err(anyhow!(
-            "No variable or application provided. {}",
-            config.get_select_key_suggestion()
-        )),
     }
 }
 
