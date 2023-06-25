@@ -39,41 +39,43 @@ dev also-dev
 
 ## Installation
 
-env-select has two components: the main binary and the shell plugins. Currently the binary can only be installed via `cargo`:
+Currently, env-select can only be installed via `cargo`:
 
 ```sh
 cargo install env-select
 ```
 
-The shell plugins are not required, but make usage easier. Otherwise, you have to manually pipe the output of each `env-select` invocation to `source`.
+### Configure Your Shell
 
-**All commands in this README assume you have the appropriate shell plugin installed.** If you don't replace any command `es ...` with `env-select ... | source`. See [the disclaimer](#source-disclaimer) for why piping to `source` is needed.
+Because env-select modifies your shell environment, it requires a wrapper function defined in the shell that can call the `env-select` binary and automatically apply its output.
 
-### Fish
+**All commands in this README assume you have the appropriate shell configuration.** See [the disclaimer](#source-disclaimer) for why piping to `source` is needed.
 
-The easiest way to install is with [fisher](https://github.com/jorgebucaran/fisher).
-
-```sh
-fisher install LucasPickering/env-select
-```
-
-Or install manually:
+#### Bash
 
 ```sh
-curl https://raw.githubusercontent.com/LucasPickering/env-select/master/functions/es.fish -o ~/.config/fish/functions/es.fish
+echo 'eval "$(env-select init)"' >> ~/.bashrc
 ```
 
-### Bash/Zsh
+#### Zsh
 
-Coming Soon™
+```sh
+echo 'source <(env-select init)' >> ~/.zshrc
+```
+
+#### Fish
+
+```sh
+echo 'env-select init | source' >> ~/.config/fish/config.fish
+```
+
+**Restart your shell (or `source <file>`) after running the above command.**
 
 ## `source` Disclaimer
 
-env-select runs as a subprocess to your shell (as all commands do), meaning it cannot modify your shell environment. To get around this, env-select will simply output shell commands that the shell plugins (or you) can then pipe to `source` to modify your session.
+env-select runs as a subprocess to your shell (as all commands do), meaning it cannot modify your shell environment. To get around this, env-select will simply output shell commands that the shell plugins (or you) can then pipe to `source` (or `eval`) to modify your session.
 
 If you think piping stuff to `source` is dangerous and sPoOky, you're right. But consider the fact that at this point, you've already downloaded and executed a mystery binary on your machine. You should've already done your due diligence.
-
-Alternatively, you can run `env-select` without piping to `source`, and it will simply print out the commands to modify your environment, which you can copy-paste to run manually.
 
 ## Bugs/Feedback
 

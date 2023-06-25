@@ -4,9 +4,12 @@ mod export;
 mod shell;
 
 use crate::{config::Config, export::Exporter, shell::Shell};
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::process::ExitCode;
+use std::{iter, process::ExitCode};
+
+const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -29,6 +32,21 @@ struct Args {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Commands {
+    /// Configure the shell environment for env-select. Intended to be piped
+    /// to `source` as part of your shell startup.
+    Init,
+
+    /// Test the given env-select command to see if it's a `set` command. This
+    /// is only useful for the wrapping shell functions; it tells them if they
+    /// should attempt to source the output of the command. The given command
+    /// is *not* executed, just parsed by clap. Return exit code 0 if it's a
+    /// `set` command, 1 otherwise.
+    #[command(hide = true)]
+    Test {
+        #[arg(trailing_var_arg = true)]
+        command: Vec<String>,
+    },
+
     /// Modify environment from a variable or application name
     Set {
         /// The name of the variable or application to select a value for
@@ -92,6 +110,21 @@ fn run(args: &Args) -> anyhow::Result<()> {
     };
 
     match &args.command {
+        Commands::Init => shell.print_init_script(),
+        Commands::Test { command } => {
+            // Attempt to parse the given command, and check if it's a `set`
+            match Args::try_parse_from(
+                iter::once(BINARY_NAME)
+                    .chain(command.iter().map(String::as_str)),
+            ) {
+                Ok(Args {
+                    command: Commands::Set { .. },
+                    ..
+                }) => Ok(()),
+                Ok(_) => Err(anyhow!("Not a `set` command: {command:?}")),
+                Err(_) => Err(anyhow!("Invalid command: {command:?}")),
+            }
+        }
         Commands::Set {
             select_key,
             profile,
@@ -105,6 +138,8 @@ fn run(args: &Args) -> anyhow::Result<()> {
             )),
         },
         Commands::Show => {
+            println!("Shell: {shell}");
+            println!();
             println!("{}", toml::to_string(&config)?);
             Ok(())
         }
