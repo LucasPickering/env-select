@@ -1,17 +1,12 @@
 mod config;
 mod console;
+mod export;
 mod shell;
 
-use crate::{
-    config::{Config, Value},
-    console::{prompt_application, prompt_variable},
-    shell::Shell,
-};
-use anyhow::anyhow;
-use atty::Stream;
+use crate::{config::Config, export::Exporter, shell::Shell};
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::{env, process::ExitCode};
+use std::process::ExitCode;
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -100,114 +95,18 @@ fn run(args: &Args) -> anyhow::Result<()> {
         Commands::Set {
             select_key,
             profile,
-        } => {
-            match select_key {
-                Some(select_key) => {
-                    // Figure out what commands we want to feed to the shell,
-                    // based on input
-                    let export_command = get_export_command(
-                        select_key,
-                        profile.as_deref(),
-                        &config,
-                        shell,
-                    )?;
-
-                    // Print the command(s) so the user can copy/pipe it to
-                    // their shell
-                    print_export_command(shell, &export_command);
-                    Ok(())
-                }
-                None => Err(config.get_suggestion_error(
-                    "No variable or application provided. {}",
-                )),
+        } => match select_key {
+            Some(select_key) => {
+                let exporter = Exporter::new(config, shell);
+                exporter.print_export_commands(select_key, profile.as_deref())
             }
-        }
+            None => Err(config.get_suggestion_error(
+                "No variable or application provided. {}",
+            )),
+        },
         Commands::Show => {
             println!("{}", toml::to_string(&config)?);
             Ok(())
         }
     }
-}
-
-/// Prompt the user to select a value/profile for the variable/application they
-/// gave, then use that to calculate the command(s) we want to feed to the shell
-/// to set the desired environment variables. This is basically the whole
-/// program.
-fn get_export_command(
-    select_key: &str,
-    profile_name: Option<&str>,
-    config: &Config,
-    shell: Shell,
-) -> anyhow::Result<String> {
-    // Check for single variable first
-    if let Some(var_options) = config.variables.get(select_key) {
-        let value = match profile_name {
-            // This is kinda weird, why are you using env-select to just pass
-            // a single value? You could just run the shell command directly...
-            // Regardless, we might as well support this instead of ignoring it
-            // or throwing an error
-            Some(value) => Value::Literal(value.into()),
-            // The standard use case - prompt the user to pick a value
-            None => prompt_variable(select_key, var_options)?.clone(),
-        };
-
-        Ok(shell.export_variable(select_key, &value))
-    }
-    // Check for applications next
-    else if let Some(application) = config.applications.get(select_key) {
-        let profile = match profile_name {
-            // User passed a profile name as an arg - look for a profile of
-            // that name
-            Some(profile_name) => {
-                application.profiles.get(profile_name).ok_or_else(|| {
-                    anyhow!(
-                        "No profile with the name {}, options are: {}",
-                        profile_name,
-                        application
-                            .profiles
-                            .keys()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                })?
-            }
-            // Show a prompt to ask the user which varset to use
-            None => prompt_application(application)?,
-        };
-
-        Ok(shell.export_profile(profile))
-    } else {
-        // Didn't match anything :(
-        Err(config.get_suggestion_error(
-            "No known variable or application by the name `{}`. {}",
-        ))
-    }
-}
-
-/// Print the export command, and if apppropriate, tell the user about a sick
-/// pro tip.
-fn print_export_command(shell: Shell, export_command: &str) {
-    // If stdout isn't redirected, then tell the user how to do that
-    // for OPTIMAL PERFORMANCE GAINS
-    if atty::is(Stream::Stdout) {
-        // Normally we don't want to print anything to stdout except for the
-        // commands, but in this case we know that stdout isn't being piped
-        // anywhere, so it's safe to send regular output there. That way, if
-        // the user happens to be piping stderr somewhere, they still see this
-        // warning.
-        println!(
-            "  HINT: Pipe command output to `{}` to apply values automatically",
-            shell.source_command()
-        );
-        println!(
-            "  E.g. `{} VARIABLE | {}`",
-            env::args().next().unwrap_or("env-select".into()),
-            shell.source_command()
-        );
-        println!("Run the command(s) below to apply variables changes:");
-        println!();
-    }
-
-    println!("{}", export_command);
 }
