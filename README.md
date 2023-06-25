@@ -37,8 +37,6 @@ SERVICE2=also-prd
 dev also-dev
 ```
 
-(See [the disclaimer](#source-disclaimer) for why piping to `source` is needed)
-
 ## Installation
 
 env-select has two components: the main binary and the shell plugins. Currently the binary can only be installed via `cargo`:
@@ -49,7 +47,7 @@ cargo install env-select
 
 The shell plugins are not required, but make usage easier. Otherwise, you have to manually pipe the output of each `env-select` invocation to `source`.
 
-**All commands in this README assume you have the appropriate shell plugin installed.** If you don't replace any command `es ...` with `env-select ... | source`.
+**All commands in this README assume you have the appropriate shell plugin installed.** If you don't replace any command `es ...` with `env-select ... | source`. See [the disclaimer](#source-disclaimer) for why piping to `source` is needed.
 
 ### Fish
 
