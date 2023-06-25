@@ -18,8 +18,14 @@ use std::{env, process::ExitCode};
 #[derive(Clone, Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
+    /// Subcommand to execute
     #[command(subcommand)]
     command: Commands,
+
+    /// Type of shell being exported to. If omitted, will be auto-detected from
+    /// the $SHELL variable
+    #[clap(short, long)]
+    shell: Option<Shell>,
 
     /// Increase output verbosity, for debugging. Supports up to -vv
     #[clap(short, long, action = clap::ArgAction::Count)]
@@ -85,7 +91,10 @@ fn run(args: &Args) -> anyhow::Result<()> {
     })?;
 
     let config = Config::load()?;
-    let shell = Shell::detect()?;
+    let shell = match args.shell {
+        Some(shell) => shell,
+        None => Shell::detect()?,
+    };
 
     match &args.command {
         Commands::Set {

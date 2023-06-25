@@ -1,9 +1,10 @@
 use crate::config::{Profile, Value};
-use anyhow::bail;
+use anyhow::anyhow;
+use clap::ValueEnum;
 use std::{env, ffi::OsStr, path::PathBuf};
 
 /// A known shell type. We can use this to export variables.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Shell {
     Bash,
     Zsh,
@@ -15,16 +16,16 @@ impl Shell {
         // The $SHELL variable should give us the path to the shell, which we
         // can use to figure out which shell it is
         let shell_path = PathBuf::from(env::var("SHELL")?);
-        let shell = match shell_path.file_name().and_then(OsStr::to_str) {
-            Some("bash") => Self::Bash,
-            Some("zsh") => Self::Zsh,
-            Some("fish") => Self::Fish,
-            Some(shell_name) => bail!("Unknown shell type: {}", shell_name),
-            None => {
-                bail!("Failed to read shell type from path: {:?}", shell_path)
-            }
-        };
-        Ok(shell)
+        let shell_name =
+            shell_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .ok_or(anyhow!(
+                    "Failed to read shell type from path: {:?}",
+                    shell_path
+                ))?;
+        Self::from_str(shell_name, true)
+            .map_err(|message| anyhow!("{}", message))
     }
 
     /// Get the command that this shell uses to ingest variables into the
