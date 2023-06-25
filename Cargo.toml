@@ -25,3 +25,9 @@ indexmap = {version = "1.9.1", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
 toml = "0.7.5"
+
+[package.metadata.release]
+# https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
+allow-branch = ["master"] 
+publish = false # CI will handle this
+tag-message = "v{{version}}"

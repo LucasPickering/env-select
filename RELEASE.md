@@ -1,24 +1,13 @@
 # Release Process
 
-## Full CLI release
-
-The release process for this tool is as follows:
+**Requires [cargo-release](https://github.com/crate-ci/cargo-release)**
 
 - Check out the `master` branch
-- Update the version number in `Cargo.toml` to `x.y.z`
-- Run the following commands:
-
-```
-# Yes those are literal `v`s, as in "version"
-git commit Cargo.toml Cargo.lock -m vx.y.z
-git tag vx.y.z
-git push && git push --tags
-```
-
-- This should trigger the release job, which will:
-  - Publish to crates.io
+- Run `cargo release <major|minor|patch>`
+- The release job will be triggered automatically which will:
   - Create a draft release on GitHub
   - Attach build artifacts to the draft release
-- Wait for the release CI jobs to finish
+  - Publish to crates.io
 - Update the draft release with patch notes
+- Wait for the release CI jobs to finish
 - Publish the release
