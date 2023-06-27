@@ -21,10 +21,10 @@ clap = {version = "4.0.17", features = ["derive"]}
 ctrlc = "3.2.3"
 dialoguer = {version = "0.10.2", default-features = false}
 env_logger = {version = "0.9.1", default-features = false, features = ["atty", "termcolor"]}
-indexmap = {version = "1.9.1", features = ["serde"]}
+indexmap = {version = "2.0.0", features = ["serde"]}
 log = "0.4.17"
 serde = {version = "1.0.145", default-features = false, features = ["derive"]}
-toml = "0.7.5"
+toml = {version = "0.7.5", features = ["preserve_order"]}
 
 [package.metadata.release]
 # https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
