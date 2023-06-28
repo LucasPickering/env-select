@@ -65,8 +65,7 @@ impl Config {
     /// profiles
     pub fn get_suggestion_error(&self, message: &str) -> anyhow::Error {
         anyhow!(
-            "{}
-Try one of the following:
+            "{} Try one of the following:
     Variables: {}
     Applications: {}",
             message,

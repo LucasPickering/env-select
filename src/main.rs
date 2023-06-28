@@ -133,9 +133,8 @@ fn run(args: &Args) -> anyhow::Result<()> {
                 let exporter = Exporter::new(config, shell);
                 exporter.print_export_commands(select_key, profile.as_deref())
             }
-            None => Err(config.get_suggestion_error(
-                "No variable or application provided. {}",
-            )),
+            None => Err(config
+                .get_suggestion_error("No variable or application provided.")),
         },
         Commands::Show => {
             println!("Shell: {shell}");
