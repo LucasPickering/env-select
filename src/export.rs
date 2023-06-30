@@ -1,5 +1,5 @@
 use crate::{
-    config::{Application, Config, Profile, Value},
+    config::{Application, Config, Profile, ValueSource},
     console,
     shell::Shell,
 };
@@ -70,14 +70,14 @@ impl Exporter {
         &self,
         variable_name: &str,
         default_value: Option<&str>,
-        options: &IndexSet<Value>,
-    ) -> anyhow::Result<Value> {
+        options: &IndexSet<ValueSource>,
+    ) -> anyhow::Result<ValueSource> {
         match default_value {
             // This is kinda weird, why are you using env-select to just pass a
             // single value? You could just run the shell command directly...
             // Regardless, we might as well support this instead of ignoring it
             // or throwing an error
-            Some(value) => Ok(Value::Literal(value.into())),
+            Some(value) => Ok(ValueSource::Literal(value.into())),
             // The standard use case - prompt the user to pick a value
             None => {
                 Ok(console::prompt_variable(variable_name, options)?.clone())
@@ -130,10 +130,10 @@ impl Environment {
     fn from_variable(
         shell: &Shell,
         variable: String,
-        value: Value,
+        value_source: ValueSource,
     ) -> anyhow::Result<Self> {
         let mut environment = Self::default();
-        environment.resolve_variable(shell, variable, value)?;
+        environment.resolve_variable(shell, variable, value_source)?;
         Ok(environment)
     }
 
@@ -165,14 +165,14 @@ impl Environment {
         &mut self,
         shell: &Shell,
         variable: String,
-        value: Value,
+        value_source: ValueSource,
     ) -> anyhow::Result<()> {
-        let value = match value {
-            Value::Literal(value) => ResolvedValue {
+        let value = match value_source {
+            ValueSource::Literal(value) => ResolvedValue {
                 value,
                 sensitive: false,
             },
-            Value::Command { command, sensitive } => ResolvedValue {
+            ValueSource::Command { command, sensitive } => ResolvedValue {
                 value: shell.execute(&command)?,
                 sensitive,
             },

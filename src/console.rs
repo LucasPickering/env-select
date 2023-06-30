@@ -1,4 +1,4 @@
-use crate::config::{Application, Profile, Value};
+use crate::config::{Application, Profile, ValueSource};
 use anyhow::bail;
 use atty::Stream;
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -13,8 +13,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// value. Returns `Ok(None)` iff the user quits out of the prompt.
 pub fn prompt_variable<'a>(
     variable: &str,
-    options: &'a IndexSet<Value>,
-) -> anyhow::Result<&'a Value> {
+    options: &'a IndexSet<ValueSource>,
+) -> anyhow::Result<&'a ValueSource> {
     let theme = ColorfulTheme::default();
     // Show a prompt to ask the user which value to use
     let chosen_index = Select::with_theme(&theme)
