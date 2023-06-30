@@ -129,6 +129,7 @@ pub struct Profile {
 /// An object should be treated as other variants, based on the field structure.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(untagged)]
+// TODO rename to ValueSource?
 pub enum Value {
     /// A plain string value
     Literal(String),

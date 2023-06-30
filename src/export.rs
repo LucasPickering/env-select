@@ -6,10 +6,7 @@ use crate::{
 use anyhow::anyhow;
 use atty::Stream;
 use indexmap::{IndexMap, IndexSet};
-use std::{
-    fmt::{Display, Formatter},
-    iter,
-};
+use std::fmt::{Display, Formatter};
 
 /// Container to handle user selection and command generation. This is the core
 /// logic for the program.
@@ -34,17 +31,18 @@ impl Exporter {
         // Check for single variable first
         let environment =
             if let Some(options) = self.config.variables.get(select_key) {
-                Ok(Environment::from_variable(
+                Environment::from_variable(
+                    &self.shell,
                     select_key.into(),
                     self.load_variable(select_key, profile_name, options)?,
-                ))
+                )
             }
             // Check for applications next
             else if let Some(application) =
                 self.config.applications.get(select_key)
             {
                 let profile = self.load_profile(application, profile_name)?;
-                Ok(profile.into())
+                Environment::from_profile(&self.shell, profile)
             } else {
                 // Didn't match anything :(
                 Err(self.config.get_suggestion_error(&format!(
@@ -119,24 +117,58 @@ impl Exporter {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Environment(pub IndexMap<String, Value>);
+#[derive(Clone, Debug, Default)]
+pub struct Environment(pub IndexMap<String, String>);
 
 impl Environment {
     /// Create a new environment from a single variable=value
-    pub fn from_variable(variable: String, value: Value) -> Self {
-        Self(IndexMap::from_iter(iter::once((variable, value))))
+    pub fn from_variable(
+        shell: &Shell,
+        variable: String,
+        value: Value,
+    ) -> anyhow::Result<Self> {
+        let mut environment = Self::default();
+        environment.resolve_variable(shell, variable, value)?;
+        Ok(environment)
     }
-}
 
-impl From<&Profile> for Environment {
-    fn from(profile: &Profile) -> Self {
-        Self(profile.variables.clone())
+    /// Create a new environment from a mapping of variable=value. This will
+    /// resolve the value(s) if necessary.
+    pub fn from_profile(
+        shell: &Shell,
+        profile: &Profile,
+    ) -> anyhow::Result<Self> {
+        let mut environment = Self::default();
+        for (variable, value) in &profile.variables {
+            environment.resolve_variable(
+                shell,
+                variable.into(),
+                value.clone(),
+            )?;
+        }
+        Ok(environment)
+    }
+
+    /// Get a string for a Value. This may involve external communication, e.g.
+    /// running a shell command
+    fn resolve_variable(
+        &mut self,
+        shell: &Shell,
+        variable: String,
+        value: Value,
+    ) -> anyhow::Result<()> {
+        let value = match value {
+            Value::Literal(value) => value,
+            Value::Command { command } => shell.execute(&command)?,
+        };
+        self.0.insert(variable, value);
+        Ok(())
     }
 }
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // TODO add sensitivity check
         for (variable, value) in &self.0 {
             writeln!(f, "{} = {}", variable, value)?;
         }

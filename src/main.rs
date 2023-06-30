@@ -83,10 +83,11 @@ fn main() -> ExitCode {
             // Print the error. Most of the time this is a user error, but this
             // will also handle system errors or application bugs. The user
             // should pass -v to get a stack trace for debugging.
+            // https://docs.rs/anyhow/1.0.71/anyhow/struct.Error.html#display-representations
             if args.verbose > 0 {
-                error!("{error}\n{}", error.backtrace());
+                error!("{error:#}\n{}", error.backtrace());
             } else {
-                error!("{error}");
+                error!("{error:#}");
             }
             ExitCode::FAILURE
         }
@@ -105,7 +106,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
 
     let config = Config::load()?;
     let shell = match &args.shell_path {
-        Some(shell_path) => Shell::from_path(shell_path)?,
+        Some(shell_path) => Shell::from_path(shell_path.into())?,
         None => Shell::detect()?,
     };
 
@@ -137,7 +138,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
                 .get_suggestion_error("No variable or application provided.")),
         },
         Commands::Show => {
-            println!("Shell: {shell}");
+            println!("Shell: {}", shell.path.to_string_lossy());
             println!();
             println!("{}", toml::to_string(&config)?);
             Ok(())
