@@ -1,11 +1,11 @@
 use crate::{config::Value, console, export::Environment};
 use anyhow::anyhow;
-use clap::ValueEnum;
 use std::{
     env,
     ffi::OsStr,
     fmt::{Display, Formatter},
-    path::PathBuf,
+    fs,
+    path::{Path, PathBuf},
 };
 
 const BASH_WRAPPER: &str = include_str!("../shells/es.bash");
@@ -13,7 +13,7 @@ const ZSH_WRAPPER: &str = include_str!("../shells/es.zsh");
 const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 
 /// A known shell type. We can use this to export variables.
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug)]
 pub enum Shell {
     Bash,
     Zsh,
@@ -25,16 +25,30 @@ impl Shell {
         // The $SHELL variable should give us the path to the shell, which we
         // can use to figure out which shell it is
         let shell_path = PathBuf::from(env::var("SHELL")?);
-        let shell_name =
-            shell_path
-                .file_name()
-                .and_then(OsStr::to_str)
-                .ok_or(anyhow!(
-                    "Failed to read shell type from path: {:?}",
-                    shell_path
-                ))?;
-        Self::from_str(shell_name, true)
-            .map_err(|message| anyhow!("{}", message))
+        Self::from_path(&shell_path)
+    }
+
+    /// Load the shell type from the given shell binary path. This will check
+    /// the type of the shell, as well as ensure that the file exists so it can
+    /// be invoked later if necessary.
+    pub fn from_path(path: &Path) -> anyhow::Result<Self> {
+        let file_metadata = fs::metadata(path)?;
+        if file_metadata.is_file() {
+            let shell_name = path.file_name().and_then(OsStr::to_str).ok_or(
+                anyhow!("Failed to read shell type from path: {:?}", path),
+            )?;
+            match shell_name {
+                "bash" => Ok(Self::Bash),
+                "zsh" => Ok(Self::Zsh),
+                "fish" => Ok(Self::Fish),
+                other => Err(anyhow!("Unsupported shell type {other}")),
+            }
+        } else {
+            Err(anyhow!(
+                "Shell path {} is not a file",
+                path.to_string_lossy()
+            ))
+        }
     }
 
     /// Print a valid shell script that will initialize the `es` wrapper as

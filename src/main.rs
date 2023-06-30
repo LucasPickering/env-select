@@ -7,7 +7,7 @@ use crate::{config::Config, export::Exporter, shell::Shell};
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::{iter, process::ExitCode};
+use std::{iter, path::PathBuf, process::ExitCode};
 
 const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
@@ -20,10 +20,10 @@ struct Args {
     #[command(subcommand)]
     command: Commands,
 
-    /// Type of shell being exported to. If omitted, will be auto-detected from
-    /// the $SHELL variable
+    /// Path to the shell binary in use. If omitted, it will be auto-detected
+    /// from the $SHELL variable. Supported shell types: bash, zsh, fish
     #[clap(short, long)]
-    shell: Option<Shell>,
+    shell_path: Option<PathBuf>,
 
     /// Increase output verbosity, for debugging. Supports up to -vv
     #[clap(short, long, action = clap::ArgAction::Count)]
@@ -104,8 +104,8 @@ fn run(args: &Args) -> anyhow::Result<()> {
     })?;
 
     let config = Config::load()?;
-    let shell = match args.shell {
-        Some(shell) => shell,
+    let shell = match &args.shell_path {
+        Some(shell_path) => Shell::from_path(shell_path)?,
         None => Shell::detect()?,
     };
 
