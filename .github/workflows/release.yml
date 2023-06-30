@@ -66,15 +66,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [linux, macos, win-msvc, win-gnu]
+        build: [linux, macos-x86, macos-aarch64, win-msvc, win-gnu]
         include:
           - build: linux
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-          - build: macos
+          - build: macos-x86
             os: macos-latest
             target: x86_64-apple-darwin
-          - build: macos
+          - build: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
           - build: win-msvc
