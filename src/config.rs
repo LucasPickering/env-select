@@ -23,7 +23,7 @@ pub struct Config {
     /// an ordered set here so the ordering from the user's file(s) is
     /// maintained, but without duplicates.
     #[serde(default, rename = "vars")]
-    pub variables: IndexMap<String, IndexSet<Value>>,
+    pub variables: IndexMap<String, IndexSet<ValueSource>>,
 
     /// A set of named applications (as in, a use case, purpose, etc.). An
     /// application typically has one or more variables that control it, and
@@ -118,7 +118,7 @@ pub struct Application {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Profile {
     #[serde(flatten)]
-    pub variables: IndexMap<String, Value>,
+    pub variables: IndexMap<String, ValueSource>,
 }
 
 /// A variable's value. Can be a literal value, or an embedded command, which
@@ -129,8 +129,7 @@ pub struct Profile {
 /// An object should be treated as other variants, based on the field structure.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(untagged)]
-// TODO rename to ValueSource?
-pub enum Value {
+pub enum ValueSource {
     /// A plain string value
     Literal(String),
     /// A command that will be executed at runtime to get the variable's value.
@@ -142,11 +141,11 @@ pub enum Value {
     },
 }
 
-impl Display for Value {
+impl Display for ValueSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Literal(value) => write!(f, "{value}"),
-            Value::Command { command, .. } => write!(f, "`{command}`"),
+            ValueSource::Literal(value) => write!(f, "{value}"),
+            ValueSource::Command { command, .. } => write!(f, "`{command}`"),
         }
     }
 }
@@ -203,9 +202,9 @@ mod tests {
     use super::*;
     use indexmap::{indexmap, indexset};
 
-    impl From<&str> for Value {
+    impl From<&str> for ValueSource {
         fn from(s: &str) -> Self {
-            Value::Literal(s.into())
+            ValueSource::Literal(s.into())
         }
     }
 
