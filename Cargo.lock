@@ -154,7 +154,7 @@ checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 
 [[package]]
 name = "env-select"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "atty",
