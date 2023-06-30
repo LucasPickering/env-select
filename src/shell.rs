@@ -76,29 +76,24 @@ impl Shell {
         Ok(())
     }
 
-    /// Get the shell command(s) that will configure the environment to a
+    /// Print the shell command(s) that will configure the environment to a
     /// particular set of key=value pairs for this shell type. This command
     /// can later be piped to the source command to apply it.
-    pub fn export(&self, environment: &Environment) -> String {
-        environment
-            .0
-            .iter()
-            .map(|(variable, value)| {
-                // Generate a shell command to export the variable
-                match self.type_ {
-                    // Single quotes are needed to prevent injection
-                    // vulnerabilities.
-                    // TODO escape inner single quotes
-                    ShellType::Bash | ShellType::Zsh => {
-                        format!("export '{variable}'='{value}'")
-                    }
-                    ShellType::Fish => {
-                        format!("set -gx '{variable}' '{value}'")
-                    }
+    pub fn export(&self, environment: &Environment) {
+        for (variable, value) in environment.iter_unmasked() {
+            // Generate a shell command to export the variable
+            match self.type_ {
+                // Single quotes are needed to prevent injection
+                // vulnerabilities.
+                // TODO escape inner single quotes
+                ShellType::Bash | ShellType::Zsh => {
+                    println!("export '{variable}'='{value}'")
                 }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+                ShellType::Fish => {
+                    println!("set -gx '{variable}' '{value}'")
+                }
+            }
+        }
     }
 
     /// Execute a command in this shell, and return the stdout value. We execute

@@ -50,8 +50,7 @@ impl Exporter {
             )))
             }?;
 
-        let export_command = self.shell.export(&environment);
-        println!("{export_command}");
+        self.shell.export(&environment);
 
         // Tell the user what we exported, on stderr so it doesn't interfere
         // with shell piping.
@@ -70,10 +69,10 @@ impl Exporter {
     fn load_variable(
         &self,
         variable_name: &str,
-        value: Option<&str>,
+        default_value: Option<&str>,
         options: &IndexSet<Value>,
     ) -> anyhow::Result<Value> {
-        match value {
+        match default_value {
             // This is kinda weird, why are you using env-select to just pass a
             // single value? You could just run the shell command directly...
             // Regardless, we might as well support this instead of ignoring it
@@ -92,9 +91,9 @@ impl Exporter {
     fn load_profile<'a>(
         &'a self,
         application: &'a Application,
-        profile_name: Option<&str>,
+        default_profile_name: Option<&str>,
     ) -> anyhow::Result<&'a Profile> {
-        match profile_name {
+        match default_profile_name {
             // User passed a profile name as an arg - look for a profile
             // of that name
             Some(profile_name) => {
@@ -118,11 +117,17 @@ impl Exporter {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Environment(pub IndexMap<String, String>);
+pub struct Environment(IndexMap<String, ResolvedValue>);
+
+#[derive(Clone, Debug)]
+struct ResolvedValue {
+    value: String,
+    sensitive: bool,
+}
 
 impl Environment {
     /// Create a new environment from a single variable=value
-    pub fn from_variable(
+    fn from_variable(
         shell: &Shell,
         variable: String,
         value: Value,
@@ -134,10 +139,7 @@ impl Environment {
 
     /// Create a new environment from a mapping of variable=value. This will
     /// resolve the value(s) if necessary.
-    pub fn from_profile(
-        shell: &Shell,
-        profile: &Profile,
-    ) -> anyhow::Result<Self> {
+    fn from_profile(shell: &Shell, profile: &Profile) -> anyhow::Result<Self> {
         let mut environment = Self::default();
         for (variable, value) in &profile.variables {
             environment.resolve_variable(
@@ -149,6 +151,14 @@ impl Environment {
         Ok(environment)
     }
 
+    /// Get an iterator over unmasked `(variable, value)` pairs, that can be
+    /// exported to the shell
+    pub fn iter_unmasked(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.0
+            .iter()
+            .map(|(variable, value)| (variable, &value.value))
+    }
+
     /// Get a string for a Value. This may involve external communication, e.g.
     /// running a shell command
     fn resolve_variable(
@@ -158,8 +168,14 @@ impl Environment {
         value: Value,
     ) -> anyhow::Result<()> {
         let value = match value {
-            Value::Literal(value) => value,
-            Value::Command { command } => shell.execute(&command)?,
+            Value::Literal(value) => ResolvedValue {
+                value,
+                sensitive: false,
+            },
+            Value::Command { command, sensitive } => ResolvedValue {
+                value: shell.execute(&command)?,
+                sensitive,
+            },
         };
         self.0.insert(variable, value);
         Ok(())
@@ -168,10 +184,20 @@ impl Environment {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // TODO add sensitivity check
         for (variable, value) in &self.0 {
-            writeln!(f, "{} = {}", variable, value)?;
+            writeln!(f, "{variable} = {value}")?;
         }
         Ok(())
+    }
+}
+
+impl Display for ResolvedValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Mask sensitive values
+        if self.sensitive {
+            write!(f, "{}", "*".repeat(self.value.len()))
+        } else {
+            write!(f, "{}", self.value)
+        }
     }
 }

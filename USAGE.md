@@ -157,12 +157,12 @@ You can define variables whose values are provided dynamically, by specific a co
 
 ```toml
 [apps.db]
-dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt"}}
+dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt", sensitive = true}}
 ```
 
-When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`.
+When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ value that will mask the value in informational logging.
 
-Note that **the command evaluation is done by your shell**, _not_ by `env-select`. This means you can use aliases and functions defined in your shell as commands.
+Note that **the command evaluation is done by your shell**. This means you can use aliases and functions defined in your shell as commands.
 
 ### Disjoint Profiles
 

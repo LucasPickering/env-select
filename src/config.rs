@@ -135,14 +135,18 @@ pub enum Value {
     Literal(String),
     /// A command that will be executed at runtime to get the variable's value.
     /// Useful for values that change, secrets, etc.
-    Command { command: String },
+    Command {
+        command: String,
+        #[serde(default)]
+        sensitive: bool,
+    },
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Literal(value) => write!(f, "{value}"),
-            Value::Command { command } => write!(f, "`{command}`"),
+            Value::Command { command, .. } => write!(f, "`{command}`"),
         }
     }
 }
