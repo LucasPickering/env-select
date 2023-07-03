@@ -275,6 +275,7 @@ dependencies = [
  "rstest",
  "rstest_reuse",
  "serde",
+ "serde_test",
  "termcolor",
  "toml",
 ]
@@ -674,6 +675,15 @@ name = "serde_spanned"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96426c9936fd7a0124915f9185ea1d20aa9445cc9821142f0a73bc9207a2e186"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde_test"
+version = "1.0.165"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4747ace0742036c7ee087583e68eef757556616b92c0a82cd8efd999559f812a"
 dependencies = [
  "serde",
 ]

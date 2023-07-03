@@ -22,7 +22,7 @@ pub struct Config {
     /// list for each variable *independently* of the other variables. We use
     /// an ordered set here so the ordering from the user's file(s) is
     /// maintained, but without duplicates.
-    #[serde(default, rename = "vars")]
+    #[serde(default, alias = "vars")]
     pub variables: IndexMap<String, IndexSet<ValueSource>>,
 
     /// A set of named applications (as in, a use case, purpose, etc.). An
@@ -201,11 +201,121 @@ impl<K: Eq + Hash, V: Merge> Merge for IndexMap<K, V> {
 mod tests {
     use super::*;
     use indexmap::{indexmap, indexset};
+    use serde_test::{assert_de_tokens, assert_de_tokens_error, Token};
 
+    const CONFIG: &str = "
+        [vars]
+        PASSWORD = [\"hunter2\", {command = \"echo secret_password | base64\", sensitive = true}]
+        TEST_VARIABLE = [\"abc\", {command = \"echo def\"}]
+
+        [apps.server]
+        dev = {SERVICE1 = \"dev\", SERVICE2 = \"also-dev\"}
+        prd = {SERVICE1 = \"prd\", SERVICE2 = \"also-prd\"}
+
+        [apps.empty]
+    ";
+
+    // For convenience in creating values
     impl From<&str> for ValueSource {
         fn from(s: &str) -> Self {
             ValueSource::Literal(s.into())
         }
+    }
+
+    /// General catch-all test
+    #[test]
+    fn test_parse_config() {
+        assert_eq!(
+            toml::from_str::<Config>(CONFIG).unwrap(),
+            Config {
+                variables: indexmap! {
+                    "TEST_VARIABLE".into() => indexset! {
+                        ValueSource::Literal("abc".into()),
+                        ValueSource::Command{
+                            command: "echo def".into(),
+                            sensitive:false,
+                        },
+                    },
+                    "PASSWORD".into() => indexset! {
+                        ValueSource::Literal("hunter2".into()),
+                        ValueSource::Command {
+                            command: "echo secret_password | base64".into(),
+                            sensitive: true
+                        },
+                    },
+                },
+                applications: indexmap! {
+                    "server".into() => Application {
+                        profiles: indexmap! {
+                            "dev".into() => Profile {
+                                variables: indexmap! {
+                                    "SERVICE1".into() => ValueSource::Literal("dev".into()),
+                                    "SERVICE2".into() => ValueSource::Literal("also-dev".into()),
+                                }
+                            },
+                            "prd".into() => Profile {
+                                variables: indexmap! {
+                                    "SERVICE1".into() => ValueSource::Literal("prd".into()),
+                                    "SERVICE2".into() => ValueSource::Literal("also-prd".into()),
+                                }
+                            }
+                        }
+                    },
+                    "empty".into() => Application {
+                        profiles: indexmap!{}
+                    }
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_literal() {
+        assert_de_tokens(
+            &ValueSource::Literal("abc".into()),
+            &[Token::Str("abc")],
+        );
+        // Can't parse non-strings
+        // https://github.com/LucasPickering/env-select/issues/16
+        assert_de_tokens_error::<ValueSource>(
+            &[Token::I32(16)],
+            "data did not match any variant of untagged enum ValueSource",
+        );
+        assert_de_tokens_error::<ValueSource>(
+            &[Token::Bool(true)],
+            "data did not match any variant of untagged enum ValueSource",
+        );
+    }
+
+    #[test]
+    fn test_parse_command() {
+        assert_de_tokens(
+            &ValueSource::Command {
+                command: "echo test".into(),
+                sensitive: false,
+            },
+            &[
+                Token::Map { len: Some(1) },
+                Token::Str("command"),
+                Token::Str("echo test"),
+                Token::MapEnd,
+            ],
+        );
+
+        assert_de_tokens(
+            &ValueSource::Command {
+                command: "echo test".into(),
+                sensitive: true,
+            },
+            &[
+                Token::Map { len: Some(2) },
+                Token::Str("command"),
+                Token::Str("echo test"),
+                Token::Str("sensitive"),
+                Token::Bool(true),
+                Token::MapEnd,
+            ],
+        );
     }
 
     #[test]
