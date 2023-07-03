@@ -1,10 +1,10 @@
 use crate::{console, export::Environment};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
+use clap::ValueEnum;
 use std::{
     env,
     ffi::OsStr,
     fmt::{Display, Formatter},
-    fs,
     path::PathBuf,
     process::Command,
 };
@@ -21,7 +21,7 @@ pub struct Shell {
 }
 
 /// A supported kind of shell
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum ShellType {
     Bash,
     Zsh,
@@ -29,34 +29,36 @@ pub enum ShellType {
 }
 
 impl Shell {
+    /// Detect the current shell from the $SHELL variable.
     pub fn detect() -> anyhow::Result<Self> {
-        // The $SHELL variable should give us the path to the shell, which we
-        // can use to figure out which shell it is
-        let shell_path = PathBuf::from(env::var("SHELL")?);
-        Self::from_path(shell_path)
+        let path = PathBuf::from(env::var("SHELL")?);
+        let shell_name = path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .ok_or(anyhow!("Failed to read shell type from path: {path:?}"))?;
+        let type_ = ShellType::from_str(shell_name, true)
+            .map_err(|message| anyhow!("{}", message))?;
+        Ok(Self { path, type_ })
     }
 
-    /// Load the shell type from the given shell binary path. This will check
-    /// the type of the shell, as well as ensure that the file exists so it can
-    /// be invoked later if necessary.
-    pub fn from_path(path: PathBuf) -> anyhow::Result<Self> {
-        let file_metadata = fs::metadata(&path)?;
-        if file_metadata.is_file() {
-            let shell_name = path.file_name().and_then(OsStr::to_str).ok_or(
-                anyhow!("Failed to read shell type from path: {path:?}"),
-            )?;
-            let shell_type = match shell_name {
-                "bash" => ShellType::Bash,
-                "zsh" => ShellType::Zsh,
-                "fish" => ShellType::Fish,
-                other => bail!("Unsupported shell type {other}"),
-            };
-            Ok(Self {
-                path,
-                type_: shell_type,
-            })
+    /// Find the shell from the given type, using `which`. This requires the
+    /// shell to be in the user's $PATH.
+    pub fn from_type(type_: ShellType) -> anyhow::Result<Self> {
+        let output = Command::new("which")
+            .arg(type_.to_string())
+            .output()
+            .context("Error finding shell path")?;
+        if output.status.success() {
+            let path = PathBuf::from(
+                String::from_utf8(output.stdout)
+                    .context("Error decoding `which` output")?
+                    .trim(),
+            );
+            Ok(Self { path, type_ })
         } else {
-            Err(anyhow!("Shell path {path:?} is not a file"))
+            Err(anyhow!(
+                "Cannot find shell of type {type_}. Is it in your $PATH?"
+            ))
         }
     }
 

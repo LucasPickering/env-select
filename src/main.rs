@@ -3,11 +3,15 @@ mod console;
 mod export;
 mod shell;
 
-use crate::{config::Config, export::Exporter, shell::Shell};
+use crate::{
+    config::Config,
+    export::Exporter,
+    shell::{Shell, ShellType},
+};
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::{iter, path::PathBuf, process::ExitCode};
+use std::{iter, process::ExitCode};
 
 const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
@@ -20,10 +24,10 @@ struct Args {
     #[command(subcommand)]
     command: Commands,
 
-    /// Path to the shell binary in use. If omitted, it will be auto-detected
-    /// from the $SHELL variable. Supported shell types: bash, zsh, fish
+    /// Type of the shell binary in use. If omitted, it will be auto-detected
+    /// from the $SHELL variable.
     #[clap(short, long)]
-    shell_path: Option<PathBuf>,
+    shell: Option<ShellType>,
 
     /// Increase output verbosity, for debugging. Supports up to -vv
     #[clap(short, long, action = clap::ArgAction::Count)]
@@ -105,8 +109,8 @@ fn run(args: &Args) -> anyhow::Result<()> {
     })?;
 
     let config = Config::load()?;
-    let shell = match &args.shell_path {
-        Some(shell_path) => Shell::from_path(shell_path.into())?,
+    let shell = match args.shell {
+        Some(shell_type) => Shell::from_type(shell_type)?,
         None => Shell::detect()?,
     };
 
