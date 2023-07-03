@@ -17,12 +17,12 @@ const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 #[derive(Clone, Debug)]
 pub struct Shell {
     pub path: PathBuf,
-    pub type_: ShellType,
+    pub kind: ShellKind,
 }
 
 /// A supported kind of shell
 #[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum ShellType {
+pub enum ShellKind {
     Bash,
     Zsh,
     Fish,
@@ -36,14 +36,14 @@ impl Shell {
             .file_name()
             .and_then(OsStr::to_str)
             .ok_or(anyhow!("Failed to read shell type from path: {path:?}"))?;
-        let type_ = ShellType::from_str(shell_name, true)
+        let type_ = ShellKind::from_str(shell_name, true)
             .map_err(|message| anyhow!("{}", message))?;
-        Ok(Self { path, type_ })
+        Ok(Self { path, kind: type_ })
     }
 
     /// Find the shell from the given type, using `which`. This requires the
     /// shell to be in the user's $PATH.
-    pub fn from_type(type_: ShellType) -> anyhow::Result<Self> {
+    pub fn from_kind(type_: ShellKind) -> anyhow::Result<Self> {
         let output = Command::new("which")
             .arg(type_.to_string())
             .output()
@@ -54,7 +54,7 @@ impl Shell {
                     .context("Error decoding `which` output")?
                     .trim(),
             );
-            Ok(Self { path, type_ })
+            Ok(Self { path, kind: type_ })
         } else {
             Err(anyhow!(
                 "Cannot find shell of type {type_}. Is it in your $PATH?"
@@ -65,10 +65,10 @@ impl Shell {
     /// Print a valid shell script that will initialize the `es` wrapper as
     /// well as whatever other initialization is needed.
     pub fn print_init_script(&self) -> anyhow::Result<()> {
-        let wrapper_src = match self.type_ {
-            ShellType::Bash => BASH_WRAPPER,
-            ShellType::Zsh => ZSH_WRAPPER,
-            ShellType::Fish => FISH_WRAPPER,
+        let wrapper_src = match self.kind {
+            ShellKind::Bash => BASH_WRAPPER,
+            ShellKind::Zsh => ZSH_WRAPPER,
+            ShellKind::Fish => FISH_WRAPPER,
         };
 
         println!("{wrapper_src}");
@@ -84,14 +84,14 @@ impl Shell {
     pub fn export(&self, environment: &Environment) {
         for (variable, value) in environment.iter_unmasked() {
             // Generate a shell command to export the variable
-            match self.type_ {
+            match self.kind {
                 // Single quotes are needed to prevent injection
                 // vulnerabilities.
                 // TODO escape inner single quotes
-                ShellType::Bash | ShellType::Zsh => {
+                ShellKind::Bash | ShellKind::Zsh => {
                     println!("export '{variable}'='{value}'")
                 }
-                ShellType::Fish => {
+                ShellKind::Fish => {
                     println!("set -gx '{variable}' '{value}'")
                 }
             }
@@ -128,7 +128,7 @@ impl Shell {
     }
 }
 
-impl Display for ShellType {
+impl Display for ShellKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Bash => write!(f, "bash"),
