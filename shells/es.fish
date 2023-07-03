@@ -5,12 +5,10 @@ function es --description "Fish wrapper for env-select"
     env-select test $argv &> /dev/null
 
     if test $status -eq 0
-        # We have to do the source as a separate command so we can access the
-        # exit code. "$()" syntax prevents fish from splitting lines into an array
-        set output "$(env-select $argv)"
+        set output (env-select $argv)
         set return_code $status
         if test $status -eq 0
-            echo $output | source
+            string join \n $output | source
         end
         return $return_code
     else
