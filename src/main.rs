@@ -6,7 +6,7 @@ mod shell;
 use crate::{
     config::Config,
     export::Exporter,
-    shell::{Shell, ShellType},
+    shell::{Shell, ShellKind},
 };
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
@@ -27,7 +27,7 @@ struct Args {
     /// Type of the shell binary in use. If omitted, it will be auto-detected
     /// from the $SHELL variable.
     #[clap(short, long)]
-    shell: Option<ShellType>,
+    shell: Option<ShellKind>,
 
     /// Increase output verbosity, for debugging. Supports up to -vv
     #[clap(short, long, action = clap::ArgAction::Count)]
@@ -110,7 +110,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
 
     let config = Config::load()?;
     let shell = match args.shell {
-        Some(shell_type) => Shell::from_type(shell_type)?,
+        Some(kind) => Shell::from_kind(kind)?,
         None => Shell::detect()?,
     };
 
