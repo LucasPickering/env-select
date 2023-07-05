@@ -1,13 +1,12 @@
 # Usage Guide
 
+## Table of Contents
+
+If viewing this [in GitHub](https://github.com/LucasPickering/env-select/blob/master/USAGE.md), use the Outline button in the top-right to view a table of contents.
+
 ## Concepts
 
-env-select operates with a few different building blocks:
-
-- [Value Source](#value-source)
-- [Variable Mapping](#variable-mapping)
-- [Profile](#profile)
-- [Application](#application)
+env-select operates with a few different building blocks. From smallest to largest, they are: Value Source, Variable Mapping, Profile, and Application.
 
 ### Value Source
 
@@ -107,6 +106,19 @@ If you know the name of the profile you want to select, you can also skip the pr
 dev also-dev
 ```
 
+### Dynamic Values
+
+You can define variables whose values are provided dynamically, by specifying a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
+
+```toml
+[apps.db]
+dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt", sensitive = true}}
+```
+
+When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
+
+Note that **the command evaluation is done by your shell**. This means you can use aliases and functions defined in your shell as commands.
+
 ## Configuration
 
 Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
@@ -122,7 +134,7 @@ Let's see this in action:
 ```toml
 # Single variables
 [vars]
-TEST_VARIABLE = ["abc", "def"]
+TEST_VARIABLE = ["abc", "def", {value = "secret", sensitive = true}]
 OTHER_VARIABLE = ["potato", "tomato"]
 
 # Applications
@@ -150,19 +162,6 @@ VAR3 = "no"
 VAR4 = "yes"
 VAR5 = "no"
 ```
-
-### Dynamic Values
-
-You can define variables whose values are provided dynamically, by specifying a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
-
-```toml
-[apps.db]
-dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt", sensitive = true}}
-```
-
-When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
-
-Note that **the command evaluation is done by your shell**. This means you can use aliases and functions defined in your shell as commands.
 
 ### Disjoint Profiles
 
@@ -218,6 +217,35 @@ prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
 
 To see where env-select is loading configs from, and how they are being merged together, run the command with the `--verbose` (or `-v`) flag.
+
+### Configuration Reference
+
+#### Value Source
+
+There are multiple types of value sources. The type used for a value source is determined by which key is set in the object. For example:
+
+```toml
+# All of these examples will generate the same exported value
+[vars]
+GREETING = [
+  {value = "hello!"}, # Literal
+  "hello", # Also a literal - this is a special shorthand
+  {command = "echo hello!"}, # Command
+]
+```
+
+The complete list of value source types is:
+
+| Value Source | Type     | Description                                                                            |
+| ------------ | -------- | -------------------------------------------------------------------------------------- |
+| `value`      | `string` | Literal static value                                                                   |
+| `command`    | `string` | Command to execute in a subshell; the output of the command will be the exported value |
+
+In addition, all value sources support the following common fields:
+
+| Option      | Type      | Default | Description                  |
+| ----------- | --------- | ------- | ---------------------------- |
+| `sensitive` | `boolean` | `false` | Hide value in console output |
 
 ## Shell Support
 

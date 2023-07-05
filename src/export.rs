@@ -1,5 +1,5 @@
 use crate::{
-    config::{Application, Config, Profile, ValueSource},
+    config::{Application, Config, Profile, ValueSource, ValueSourceKind},
     console,
     shell::Shell,
 };
@@ -77,7 +77,7 @@ impl Exporter {
             // single value? You could just run the shell command directly...
             // Regardless, we might as well support this instead of ignoring it
             // or throwing an error
-            Some(value) => Ok(ValueSource::Literal(value.into())),
+            Some(value) => Ok(ValueSource::from_literal(value)),
             // The standard use case - prompt the user to pick a value
             None => {
                 Ok(console::prompt_variable(variable_name, options)?.clone())
@@ -167,17 +167,17 @@ impl Environment {
         variable: String,
         value_source: ValueSource,
     ) -> anyhow::Result<()> {
-        let value = match value_source {
-            ValueSource::Literal(value) => ResolvedValue {
-                value,
-                sensitive: false,
-            },
-            ValueSource::Command { command, sensitive } => ResolvedValue {
-                value: shell.execute(&command)?,
-                sensitive,
-            },
+        let value = match value_source.0.kind {
+            ValueSourceKind::Literal { value } => value,
+            ValueSourceKind::Command { command } => shell.execute(&command)?,
         };
-        self.0.insert(variable, value);
+        self.0.insert(
+            variable,
+            ResolvedValue {
+                value,
+                sensitive: value_source.0.sensitive,
+            },
+        );
         Ok(())
     }
 }
