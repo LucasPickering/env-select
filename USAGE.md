@@ -111,13 +111,22 @@ dev also-dev
 You can define variables whose values are provided dynamically, by specifying a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
 
 ```toml
-[apps.db]
-dev = {DATABASE = "dev", DB_USER = "root", DB_PASSWORD = {command = "cat password.txt", sensitive = true}}
+[apps.db.dev]
+DATABASE = "dev"
+DB_USER = "root"
+DB_PASSWORD = {command = ["cat", "password.txt"], sensitive = true}
 ```
 
 When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
 
-Note that **the command evaluation is done by your shell**. This means you can use aliases and functions defined in your shell as commands.
+By default, the program (the first argument in the list) is executed directly by env-select, and passed the rest of the list as arguments. If you want to execute a command in your shell, you can use the `shell` field instead. This will give access to shell features such as aliases and pipes. For example:
+
+```toml
+[apps.db.dev]
+DATABASE = "dev"
+DB_USER = "root"
+DB_PASSWORD = {shell = "echo password | base64", sensitive = true}
+```
 
 ## Configuration
 
@@ -230,16 +239,18 @@ There are multiple types of value sources. The type used for a value source is d
 GREETING = [
   {value = "hello!"}, # Literal
   "hello", # Also a literal - this is a special shorthand
-  {command = "echo hello!"}, # Command
+  {command = ["echo", "hello!"]}, # Native command
+  {shell = "echo hello"}, # Shell command
 ]
 ```
 
 The complete list of value source types is:
 
-| Value Source | Type     | Description                                                                            |
-| ------------ | -------- | -------------------------------------------------------------------------------------- |
-| `value`      | `string` | Literal static value                                                                   |
-| `command`    | `string` | Command to execute in a subshell; the output of the command will be the exported value |
+| Value Source | Type            | Description                                                                                  |
+| ------------ | --------------- | -------------------------------------------------------------------------------------------- |
+| `value`      | `string`        | Literal static value                                                                         |
+| `command`    | `array[string]` | Command to execute, as `[program, ...arguments]`; the output of the command will be exported |
+| `shell`      | `string`        | Command to execute in a subshell; the output of the command will be exported                 |
 
 In addition, all value sources support the following common fields:
 

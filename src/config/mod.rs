@@ -84,9 +84,48 @@ pub struct ValueSourceInner {
 pub enum ValueSourceKind {
     /// A plain string value
     Literal { value: String },
-    /// A command that will be executed at runtime to get the variable's value.
-    /// Useful for values that change, secrets, etc.
-    Command { command: String },
+    /// A native command (program+arguments) that will be executed at runtime
+    /// to get the variable's value. Useful for values that change, secrets,
+    /// etc.
+    NativeCommand { command: NativeCommand },
+    /// A command that will be executed via the shell. Allows access to
+    /// aliases, pipes, etc.
+    ShellCommand {
+        #[serde(rename = "shell")]
+        command: String,
+    },
+}
+
+/// A native command is a program name/path, with zero or more arguments. This
+/// is a separate type so we can easily serialize into/out of `Vec<String>`.
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(try_from = "Vec<String>", into = "Vec<String>")]
+pub struct NativeCommand {
+    pub program: String,
+    pub arguments: Vec<String>,
+}
+
+impl From<NativeCommand> for Vec<String> {
+    fn from(value: NativeCommand) -> Self {
+        let mut elements = value.arguments;
+        elements.insert(0, value.program); // O(n)! Spooky!
+        elements
+    }
+}
+
+impl TryFrom<Vec<String>> for NativeCommand {
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
+        if !value.is_empty() {
+            Ok(Self {
+                program: value.remove(0),
+                arguments: value,
+            })
+        } else {
+            Err(anyhow!("Native command must have at least one element"))
+        }
+    }
 }
 
 impl Config {
@@ -160,33 +199,6 @@ impl Config {
     }
 }
 
-impl Display for ValueSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<ValueSourceInner> for ValueSource {
-    fn from(value: ValueSourceInner) -> Self {
-        Self(value)
-    }
-}
-
-impl Display for ValueSourceInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)
-    }
-}
-
-impl Display for ValueSourceKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Literal { value } => write!(f, "{value}"),
-            Self::Command { command } => write!(f, "`{command}`"),
-        }
-    }
-}
-
 impl ValueSource {
     /// Build a [ValueSource] from a simple string value. All extra fields
     /// are populated with defaults.
@@ -200,28 +212,51 @@ impl ValueSource {
     }
 }
 
+impl Display for ValueSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0.kind {
+            ValueSourceKind::Literal { value } => write!(f, "{value}"),
+            ValueSourceKind::NativeCommand {
+                command: NativeCommand { program, arguments },
+            } => {
+                write!(f, "`{program}")?;
+                for argument in arguments {
+                    write!(f, " {argument}")?;
+                }
+                write!(f, "`")?;
+                Ok(())
+            }
+            ValueSourceKind::ShellCommand { command } => {
+                write!(f, "`{command}`")
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{Application, Config, Profile, ValueSourceKind};
     use indexmap::{IndexMap, IndexSet};
-    use serde_test::{assert_de_tokens, assert_de_tokens_error, Token};
+    use serde_test::{
+        assert_de_tokens, assert_de_tokens_error, assert_tokens, Token,
+    };
 
     const CONFIG: &str = r#"
 [vars]
 PASSWORD = [
     "hunter2",
     {value = "secret-but-not-really", sensitive = true},
-    {command = "echo secret_password | base64", sensitive = true},
+    {shell = "echo secret_password | base64", sensitive = true},
 ]
-TEST_VARIABLE = ["abc", {command = "echo def"}]
+TEST_VARIABLE = ["abc", {command = ["echo", "def"]}]
 
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 [apps.server.secret]
 SERVICE1 = {value = "secret", sensitive = true}
-SERVICE2 = {command = "echo also-secret", sensitive = true}
+SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
 
 [apps.empty]
     "#;
@@ -258,23 +293,33 @@ SERVICE2 = {command = "echo also-secret", sensitive = true}
         })
     }
 
-    /// Helper to create a non-sensitive command
-    fn command(command: &str) -> ValueSource {
+    /// Helper to create a native command
+    fn native<const N: usize>(
+        program: &str,
+        arguments: [&str; N],
+        sensitive: bool,
+    ) -> ValueSource {
         ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::Command {
-                command: command.to_owned(),
+            kind: ValueSourceKind::NativeCommand {
+                command: NativeCommand {
+                    program: program.into(),
+                    arguments: arguments
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                },
             },
-            sensitive: false,
+            sensitive,
         })
     }
 
-    /// Helper to create a sensitive command
-    fn command_sensitive(command: &str) -> ValueSource {
+    /// Helper to create a shell command
+    fn shell(command: &str, sensitive: bool) -> ValueSource {
         ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::Command {
+            kind: ValueSourceKind::ShellCommand {
                 command: command.to_owned(),
             },
-            sensitive: true,
+            sensitive,
         })
     }
 
@@ -285,14 +330,17 @@ SERVICE2 = {command = "echo also-secret", sensitive = true}
             variables: map([
                 (
                     "TEST_VARIABLE",
-                    IndexSet::from([literal("abc"), command("echo def")]),
+                    IndexSet::from([
+                        literal("abc"),
+                        native("echo", ["def"], false),
+                    ]),
                 ),
                 (
                     "PASSWORD",
                     IndexSet::from([
                         literal("hunter2"),
                         literal_sensitive("secret-but-not-really"),
-                        command_sensitive("echo secret_password | base64"),
+                        shell("echo secret_password | base64", true),
                     ]),
                 ),
             ]),
@@ -330,8 +378,10 @@ SERVICE2 = {command = "echo also-secret", sensitive = true}
                                         ),
                                         (
                                             "SERVICE2",
-                                            command_sensitive(
-                                                "echo also-secret",
+                                            native(
+                                                "echo",
+                                                ["also-secret"],
+                                                true,
                                             ),
                                         ),
                                     ]),
@@ -355,12 +405,15 @@ SERVICE2 = {command = "echo also-secret", sensitive = true}
     fn test_parse_literal() {
         // Flat or complex syntax (they're equivalent)
         assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
-        assert_de_tokens(
-            &literal("abc"),
+        // This is the serialized format
+        assert_tokens(
+            &literal_sensitive("abc").0,
             &[
-                Token::Map { len: Some(1) },
+                Token::Map { len: None },
                 Token::Str("value"),
                 Token::Str("abc"),
+                Token::Str("sensitive"),
+                Token::Bool(true),
                 Token::MapEnd,
             ],
         );
@@ -378,35 +431,123 @@ SERVICE2 = {command = "echo also-secret", sensitive = true}
     }
 
     #[test]
-    fn test_parse_command() {
+    fn test_parse_native_command() {
+        // Default native command
         assert_de_tokens(
-            &ValueSourceInner {
-                kind: ValueSourceKind::Command {
-                    command: "echo test".into(),
-                },
-                sensitive: false,
-            },
+            &native("echo", ["test"], false).0,
             &[
-                Token::Map { len: Some(1) },
+                Token::Map { len: None },
                 Token::Str("command"),
+                Token::Seq { len: Some(2) },
+                Token::Str("echo"),
+                Token::Str("test"),
+                Token::SeqEnd,
+                Token::MapEnd,
+            ],
+        );
+
+        // Sensitive native command
+        assert_tokens(
+            &native("echo", ["test"], true).0,
+            &[
+                Token::Map { len: None },
+                Token::Str("command"),
+                Token::Seq { len: Some(2) },
+                Token::Str("echo"),
+                Token::Str("test"),
+                Token::SeqEnd,
+                Token::Str("sensitive"),
+                Token::Bool(true),
+                Token::MapEnd,
+            ],
+        );
+
+        // Empty command - error
+        // This error message sucks but we'll have to override Deserialize for
+        // all of CommandDefinition to fix it
+        assert_de_tokens_error::<ValueSourceKind>(
+            &[
+                Token::Map { len: None },
+                Token::Str("command"),
+                Token::Seq { len: Some(0) },
+                Token::SeqEnd,
+                Token::MapEnd,
+            ],
+            "data did not match any variant of untagged enum ValueSourceKind",
+        );
+    }
+
+    #[test]
+    fn test_parse_shell_command() {
+        // Regular shell command
+        assert_de_tokens(
+            &shell("echo test", false).0,
+            &[
+                Token::Map { len: None },
+                Token::Str("shell"),
                 Token::Str("echo test"),
                 Token::MapEnd,
             ],
         );
 
-        assert_de_tokens(
-            &ValueSourceInner {
-                kind: ValueSourceKind::Command {
-                    command: "echo test".into(),
-                },
-                sensitive: true,
-            },
+        // Sensitive shell command
+        assert_tokens(
+            &shell("echo test", true).0,
             &[
-                Token::Map { len: Some(2) },
-                Token::Str("command"),
+                Token::Map { len: None },
+                Token::Str("shell"),
                 Token::Str("echo test"),
                 Token::Str("sensitive"),
                 Token::Bool(true),
+                Token::MapEnd,
+            ],
+        );
+    }
+
+    /// If multiple value sources are specified, the earlier ones in the enum
+    /// definition take precedence
+    #[test]
+    fn test_parse_multiple_value_sources() {
+        assert_de_tokens(
+            &literal("abc").0,
+            &[
+                Token::Map { len: None },
+                Token::Str("value"),
+                Token::Str("abc"),
+                // Values here are ignored entirely
+                Token::Str("command"),
+                Token::Str("bad type"),
+                Token::Str("shell"),
+                Token::Str("echo test"),
+                Token::MapEnd,
+            ],
+        );
+
+        // `value` takes precedence because it appears first in ValueSourceKind
+        assert_de_tokens(
+            &literal("abc").0,
+            &[
+                Token::Map { len: None },
+                Token::Str("shell"),
+                Token::Str("echo test"),
+                Token::Str("value"),
+                Token::Str("abc"),
+                Token::MapEnd,
+            ],
+        );
+
+        // Invalid values
+        assert_de_tokens(
+            &shell("echo test", false).0,
+            &[
+                Token::Map { len: None },
+                // First two are skipped because of incorrect types
+                Token::Str("command"),
+                Token::Str("bad type"),
+                Token::Str("value"),
+                Token::I32(6),
+                Token::Str("shell"),
+                Token::Str("echo test"),
                 Token::MapEnd,
             ],
         );
