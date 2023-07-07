@@ -114,18 +114,18 @@ You can define variables whose values are provided dynamically, by specifying a 
 [apps.db.dev]
 DATABASE = "dev"
 DB_USER = "root"
-DB_PASSWORD = {command = ["cat", "password.txt"], sensitive = true}
+DB_PASSWORD = {type = "command", command = ["cat", "password.txt"], sensitive = true}
 ```
 
 When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
 
-By default, the program (the first argument in the list) is executed directly by env-select, and passed the rest of the list as arguments. If you want to execute a command in your shell, you can use the `shell` field instead. This will give access to shell features such as aliases and pipes. For example:
+By default, the program (the first argument in the list) is executed directly by env-select, and passed the rest of the list as arguments. If you want to execute a command in your shell, you can use the `shell` type instead. This will give access to shell features such as aliases and pipes. For example:
 
 ```toml
 [apps.db.dev]
 DATABASE = "dev"
 DB_USER = "root"
-DB_PASSWORD = {shell = "echo password | base64", sensitive = true}
+DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = true}
 ```
 
 ## Configuration
@@ -227,36 +227,48 @@ prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 
 To see where env-select is loading configs from, and how they are being merged together, run the command with the `--verbose` (or `-v`) flag.
 
-### Configuration Reference
+## Configuration Reference
 
-#### Value Source
+### Value Source
 
-There are multiple types of value sources. The type used for a value source is determined by which key is set in the object. For example:
+There are multiple types of value sources. The type used for a value source is determined by the `type` field. For example:
 
 ```toml
 # All of these examples will generate the same exported value
 [vars]
 GREETING = [
-  {value = "hello!"}, # Literal
-  "hello", # Also a literal - this is a special shorthand
-  {command = ["echo", "hello!"]}, # Native command
-  {shell = "echo hello"}, # Shell command
+  "hello", # Literal - shorthand (most common)
+  {type = "literal", value = "hello!"}, # Literal - expanded form
+  {type = "command", command = ["echo", "hello!"]}, # Native command
+  {type = "shell", command = "echo hello"}, # Shell command
 ]
 ```
 
-The complete list of value source types is:
+#### Value Source Types
 
-| Value Source | Type            | Description                                                                                  |
-| ------------ | --------------- | -------------------------------------------------------------------------------------------- |
-| `value`      | `string`        | Literal static value                                                                         |
-| `command`    | `array[string]` | Command to execute, as `[program, ...arguments]`; the output of the command will be exported |
-| `shell`      | `string`        | Command to execute in a subshell; the output of the command will be exported                 |
+| Value Source Type | Description                              |
+| ----------------- | ---------------------------------------- |
+| `literal`         | Literal static value                     |
+| `command`         | Execute an external program by name/path |
+| `shell`           | Execute a shell command                  |
 
-In addition, all value sources support the following common fields:
+#### Common Fields
+
+All value sources support the following common fields:
 
 | Option      | Type      | Default | Description                  |
 | ----------- | --------- | ------- | ---------------------------- |
 | `sensitive` | `boolean` | `false` | Hide value in console output |
+
+#### Type-Specific Fields
+
+Each source type has its own set of available fields:
+
+| Value Source Type | Field     | Type            | Description                                                                                  |
+| ----------------- | --------- | --------------- | -------------------------------------------------------------------------------------------- |
+| `literal`         | `value`   | `string`        | Static value to export                                                                       |
+| `command`         | `command` | `array[string]` | Command to execute, as `[program, ...arguments]`; the output of the command will be exported |
+| `shell`           | `command` | `string`        | Command to execute in a subshell; the output of the command will be exported                 |
 
 ## Shell Support
 
