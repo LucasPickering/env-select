@@ -29,7 +29,7 @@ struct Args {
     #[clap(short, long)]
     shell: Option<ShellKind>,
 
-    /// Increase output verbosity, for debugging. Supports up to -vv
+    /// Increase output verbosity, for debugging. Supports up to -vvv
     #[clap(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
@@ -75,8 +75,9 @@ fn main() -> ExitCode {
         .format_module_path(false)
         .format_target(false)
         .filter_level(match args.verbose {
-            0 => LevelFilter::Info,
-            1 => LevelFilter::Debug,
+            0 => LevelFilter::Warn,
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
             _ => LevelFilter::Trace,
         })
         .init();
