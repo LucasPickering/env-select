@@ -106,6 +106,39 @@ If you know the name of the profile you want to select, you can also skip the pr
 dev also-dev
 ```
 
+### Run a single command
+
+If you want to run only a single command in the modified environment, rather than modify the entire shell, you can use `es run` instead of `es set`:
+
+```sh
+# Select the profile to use for the `server` application, then run the command
+> es run server -- echo $SERVICE1 $SERVICE2
+❯ === dev ===
+SERVICE1=dev
+SERVICE2=also-dev
+
+  === prd ===
+SERVICE1=prd
+SERVICE2=also-prd
+
+dev also-dev
+# You can also specify the profile name up front
+> es run server dev -- echo $SERVICE1 $SERVICE2
+dev also-dev
+# The surrounding environment is *not* modified
+> echo $SERVICE1 $SERVICE2
+
+```
+
+`--` is required to delineate the arguments handled by `es` from the command being executed. The executed command is called directly, _not_ executed in a shell. To access shell features in the executed command, you can explicitly run in a subshell:
+
+```sh
+> es run server dev -- sh -c 'echo $SERVICE1 | cat -'
+dev
+```
+
+Make sure to use **single** quotes in those case, otherwise `$SERVICE1` will be evaluted by your shell _before_ executing env-select.
+
 ### Dynamic Values
 
 You can define variables whose values are provided dynamically, by specifying a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
