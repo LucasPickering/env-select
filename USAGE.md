@@ -128,6 +128,28 @@ DB_USER = "root"
 DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = true}
 ```
 
+### Load Values from Kubernetes
+
+Ever had a secret in a Kubernetes pod that you want to fetch easily? The `kubernetes` value source lets you run any command in a kubernetes pod.
+
+```toml
+[apps.db.dev]
+DATABASE = "dev"
+DB_USER = "root"
+DB_PASSWORD = {type = "kubernetes", namespace = "development", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
+
+[apps.db.prd]
+DATABASE = "prd"
+DB_USER = "root"
+DB_PASSWORD = {type = "kubernetes", namespace = "production", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
+```
+
+`printenv` can be used to easily access environment variables, but you can execute any command you want in the pod. To access shell features in the pod, you'll need to execute under a shell. For example:
+
+```
+command = ["sh", "-c", "env | grep DB_PASSWORD | sed -E 's/.+=(.+)/\1/'"]
+```
+
 ## Configuration
 
 Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
@@ -251,6 +273,7 @@ GREETING = [
 | `literal`         | Literal static value                     |
 | `command`         | Execute an external program by name/path |
 | `shell`           | Execute a shell command                  |
+| `kubernetes`      | Execute a command in a Kubernetes pod    |
 
 #### Common Fields
 
@@ -264,11 +287,15 @@ All value sources support the following common fields:
 
 Each source type has its own set of available fields:
 
-| Value Source Type | Field     | Type            | Description                                                                                  |
-| ----------------- | --------- | --------------- | -------------------------------------------------------------------------------------------- |
-| `literal`         | `value`   | `string`        | Static value to export                                                                       |
-| `command`         | `command` | `array[string]` | Command to execute, as `[program, ...arguments]`; the output of the command will be exported |
-| `shell`           | `command` | `string`        | Command to execute in a subshell; the output of the command will be exported                 |
+| Value Source Type | Field          | Type            | Default      | Description                                                                                                                                                                       |
+| ----------------- | -------------- | --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                            |
+| `command`         | `command`      | `array[string]` | **Required** | Command to execute, as `[program, ...arguments]`; the output of the command will be exported                                                                                      |
+| `shell`           | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                      |
+| `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                           |
+| `kubernetes`      | `pod_selector` | `string`        | **Required** | Label query used to find the target pod. Must match exactly one pod. See [kubectl docs](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more info. |
+| `kubernetes`      | `namespace`    | `string`        | `null`       | Namespace in which to search for the target pod. If omitted, `kubectl` will use the current context namespace.                                                                    |
+| `kubernetes`      | `container`    | `string`        | `null`       | Container within the target pod to execute in. If omitted, `kubectl` will use the default defined by the `kubectl.kubernetes.io/default-container` annotation.                    |
 
 ## Shell Support
 

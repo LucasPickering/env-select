@@ -37,6 +37,8 @@ SERVICE2=also-prd
 dev also-dev
 ```
 
+See the [Usage Guide](USAGE.md) for more detailed examples.
+
 ## Installation
 
 Currently, env-select can only be installed via `cargo`:

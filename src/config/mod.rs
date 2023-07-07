@@ -94,6 +94,21 @@ pub enum ValueSourceKind {
     /// aliases, pipes, etc.
     #[serde(rename = "shell")]
     ShellCommand { command: String },
+    /// Run a command in a kubernetes pod.
+    #[serde(rename = "kubernetes")]
+    KubernetesCommand {
+        /// Command to execute in the pod
+        command: NativeCommand,
+        /// Label query used to find the pod
+        /// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+        pod_selector: String,
+        /// Optional namespace to run in. If omitted, use current namespace
+        /// from kubectl context.
+        namespace: Option<String>,
+        /// Optional container to run in. If omitted, use
+        /// `kubectl.kubernetes.io/default-container` annotation.
+        container: Option<String>,
+    },
 }
 
 /// A native command is a program name/path, with zero or more arguments. This
@@ -101,7 +116,9 @@ pub enum ValueSourceKind {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(try_from = "Vec<String>", into = "Vec<String>")]
 pub struct NativeCommand {
+    /// Name (or path) of program to execute
     pub program: String,
+    /// Arguments (if any) to pass to the program
     pub arguments: Vec<String>,
 }
 
@@ -216,20 +233,41 @@ impl Display for ValueSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0.kind {
             ValueSourceKind::Literal { value } => write!(f, "{value}"),
-            ValueSourceKind::NativeCommand {
-                command: NativeCommand { program, arguments },
-            } => {
-                write!(f, "`{program}")?;
-                for argument in arguments {
-                    write!(f, " {argument}")?;
-                }
-                write!(f, "`")?;
-                Ok(())
+            ValueSourceKind::NativeCommand { command } => {
+                write!(f, "{command} (native)")
             }
             ValueSourceKind::ShellCommand { command } => {
-                write!(f, "`{command}`")
+                write!(f, "`{command}` (shell)")
+            }
+            ValueSourceKind::KubernetesCommand {
+                command,
+                pod_selector,
+                namespace,
+                container,
+            } => {
+                write!(
+                    f,
+                    "{command} (kubernetes {}[{pod_selector}]",
+                    namespace.as_deref().unwrap_or("<current namespace>")
+                )?;
+                if let Some(container) = container {
+                    write!(f, ".{container}")?;
+                }
+                write!(f, ")")?;
+                Ok(())
             }
         }
+    }
+}
+
+impl Display for NativeCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`{}", self.program)?;
+        for argument in &self.arguments {
+            write!(f, " {argument}")?;
+        }
+        write!(f, "`")?;
+        Ok(())
     }
 }
 
@@ -515,6 +553,50 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
     }
 
     #[test]
+    fn test_parse_kubernetes() {
+        assert_tokens(
+            &ValueSourceInner {
+                kind: ValueSourceKind::KubernetesCommand {
+                    command: NativeCommand {
+                        program: "printenv".to_owned(),
+                        arguments: vec!["DB_PASSWORD".to_owned()],
+                    },
+                    pod_selector: "app=api".to_owned(),
+                    namespace: Some("development".to_owned()),
+                    container: Some("main".to_owned()),
+                },
+                sensitive: true,
+            },
+            &[
+                Token::Map { len: None },
+                Token::Str("type"),
+                Token::Str("kubernetes"),
+                //
+                Token::Str("command"),
+                Token::Seq { len: Some(2) },
+                Token::Str("printenv"),
+                Token::Str("DB_PASSWORD"),
+                Token::SeqEnd,
+                //
+                Token::Str("pod_selector"),
+                Token::Str("app=api"),
+                //
+                Token::Str("namespace"),
+                Token::Some,
+                Token::Str("development"),
+                //
+                Token::Str("container"),
+                Token::Some,
+                Token::Str("main"),
+                //
+                Token::Str("sensitive"),
+                Token::Bool(true),
+                Token::MapEnd,
+            ],
+        );
+    }
+
+    #[test]
     fn test_parse_unknown_type() {
         assert_de_tokens_error::<ValueSource>(
             &[
@@ -523,7 +605,8 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
                 Token::Str("unknown"),
                 Token::MapEnd,
             ],
-            "unknown variant `unknown`, expected one of `literal`, `command`, `shell`",
+            "unknown variant `unknown`, expected one of \
+            `literal`, `command`, `shell`, `kubernetes`",
         )
     }
 
