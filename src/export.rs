@@ -171,10 +171,25 @@ impl Environment {
         value_source: ValueSource,
     ) -> anyhow::Result<()> {
         let value = match value_source.0.kind {
+            // Plain value
             ValueSourceKind::Literal { value } => value,
+            // Run a program+args locally
             ValueSourceKind::NativeCommand {
                 command: NativeCommand { program, arguments },
-            } => shell.execute_native(program, &arguments)?,
+            } => Shell::execute_native(program, &arguments)?,
+            // Run a program+args in a kubernetes pod/container
+            ValueSourceKind::KubernetesCommand {
+                command,
+                pod_selector: pod_filter,
+                namespace,
+                container,
+            } => Shell::execute_kubernetes(
+                &command,
+                &pod_filter,
+                namespace.as_deref(),
+                container.as_deref(),
+            )?,
+            // Run a command locally via the shell
             ValueSourceKind::ShellCommand { command } => {
                 shell.execute_shell(&command)?
             }
