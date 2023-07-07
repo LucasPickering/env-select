@@ -1,5 +1,8 @@
 use crate::{
-    config::{Application, Config, Profile, ValueSource, ValueSourceKind},
+    config::{
+        Application, Config, NativeCommand, Profile, ValueSource,
+        ValueSourceKind,
+    },
     console,
     shell::Shell,
 };
@@ -169,7 +172,12 @@ impl Environment {
     ) -> anyhow::Result<()> {
         let value = match value_source.0.kind {
             ValueSourceKind::Literal { value } => value,
-            ValueSourceKind::Command { command } => shell.execute(&command)?,
+            ValueSourceKind::NativeCommand {
+                command: NativeCommand { program, arguments },
+            } => shell.execute_native(program, &arguments)?,
+            ValueSourceKind::ShellCommand { command } => {
+                shell.execute_shell(&command)?
+            }
         };
         self.0.insert(
             variable,

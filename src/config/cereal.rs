@@ -6,6 +6,7 @@ use serde::{
     Deserialize, Deserializer,
 };
 
+// Custom deserialization for ValueSource, to support simple string OR map
 impl<'de> Deserialize<'de> for ValueSource {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

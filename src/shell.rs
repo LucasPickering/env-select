@@ -4,7 +4,7 @@ use clap::ValueEnum;
 use std::{
     env,
     ffi::OsStr,
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     path::PathBuf,
     process::Command,
 };
@@ -98,15 +98,26 @@ impl Shell {
         }
     }
 
-    /// Execute a command in this shell, and return the stdout value. We execute
-    /// within the shell, rather than directly, so the user can use aliases,
-    /// piping, and other features from their shell.
-    pub fn execute(&self, command: &str) -> anyhow::Result<String> {
-        let output = Command::new(&self.path)
-            .args(["-c", command])
-            .output()
-            .with_context(|| format!("Error executing command `{command}`"))?;
+    /// Execute a command in this shell, and return the stdout value.
+    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
+        self.execute_native(&self.path, &["-c", command])
+    }
 
+    /// Execute a program with the given arguments, and return the stdout value.
+    pub fn execute_native(
+        &self,
+        program: impl AsRef<OsStr> + Debug,
+        args: &[impl AsRef<OsStr> + Debug],
+    ) -> anyhow::Result<String> {
+        let output =
+            Command::new(&program)
+                .args(args)
+                .output()
+                .with_context(|| {
+                    format!(
+                        "Error executing program {program:?} with args {args:?}"
+                    )
+                })?;
         // TODO Replace with ExitStatus::exit_ok
         // https://github.com/rust-lang/rust/issues/84908
         if output.status.success() {
@@ -116,8 +127,7 @@ impl Shell {
                 .to_string())
         } else {
             Err(anyhow!(
-                "`{}` failed with exit code {}",
-                command,
+                "{program:?} {args:?} failed with exit code {}",
                 output
                     .status
                     .code()
