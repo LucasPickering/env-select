@@ -78,7 +78,7 @@ impl Shell {
     /// Print the shell command(s) that will configure the environment to a
     /// particular set of key=value pairs for this shell type. This command
     /// can later be piped to the source command to apply it.
-    pub fn export(&self, environment: &Environment) {
+    pub fn print_export(&self, environment: &Environment) {
         for (variable, value) in environment.iter_unmasked() {
             // Generate a shell command to export the variable
             match self.kind {

@@ -1,17 +1,22 @@
 mod config;
 mod console;
+mod error;
 mod export;
 mod shell;
 
 use crate::{
     config::Config,
+    error::ExitCodeError,
     export::Exporter,
     shell::{Shell, ShellKind},
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use clap::{Parser, Subcommand};
-use log::{error, LevelFilter};
-use std::{iter, process::ExitCode};
+use log::{error, info, LevelFilter};
+use std::{
+    iter,
+    process::{Command, ExitCode},
+};
 
 const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
@@ -51,21 +56,41 @@ enum Commands {
         command: Vec<String>,
     },
 
-    /// Modify environment from a variable or application name
-    Set {
-        /// The name of the variable or application to select a value for
-        select_key: Option<String>,
+    /// Run a command in an augmented environment, via a configured
+    /// variable/application
+    Run {
+        #[command(flatten)]
+        selection_args: SelectionArgs,
 
-        /// Profile to select. If not specified, an interactive prompt will be
-        /// shown to select between possible options.
-        ///
-        /// This also supports literal values for single variables.
-        profile: Option<String>,
+        /// Command to execute, as <PROGRAM> [ARGUMENTS]...
+        #[arg(required = true, last = true)]
+        command: Vec<String>,
+    },
+
+    /// Modify shell environment via a configured variable/application
+    Set {
+        #[command(flatten)]
+        selection_args: SelectionArgs,
     },
 
     /// Show current configuration, with all available variables and
     /// applications
     Show,
+}
+
+/// Arguments required for any subcommand that allows variable/profile
+/// selection.
+#[derive(Clone, Debug, clap::Args)]
+struct SelectionArgs {
+    /// The name of the variable or application to select a value for
+    #[arg(name = "VARIABLE|APPLICATION")]
+    // TODO make this optional and allow selecting variable/application in TUI
+    select_key: String,
+
+    /// Profile to select. If omitted, an interactive prompt will be shown to
+    /// select between possible options. For single variables, this will be
+    /// used as the exported value.
+    profile: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -85,16 +110,27 @@ fn main() -> ExitCode {
     match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            // Print the error. Most of the time this is a user error, but this
-            // will also handle system errors or application bugs. The user
-            // should pass -v to get a stack trace for debugging.
-            // https://docs.rs/anyhow/1.0.71/anyhow/struct.Error.html#display-representations
-            if args.verbose > 0 {
-                error!("{error:#}\n{}", error.backtrace());
-            } else {
-                error!("{error:#}");
+            // If the error includes an exit code, use it
+            match error.downcast::<ExitCodeError>() {
+                // If we're propagating the exit code, we don't want to print
+                // the error. This is for `env-select run`, which means
+                // stdout/stderr have been forwarded and we don't want to tack
+                // on any more logging.
+                Ok(error) => error.into(),
+                // For most errors, print it. Most of the time this is a user
+                // error, but this will also handle system errors or application
+                // bugs. The user should pass -v to get a stack trace for
+                // debugging.
+                // https://docs.rs/anyhow/1.0.71/anyhow/struct.Error.html#display-representations
+                Err(error) => {
+                    if args.verbose > 0 {
+                        error!("{error:#}\n{}", error.backtrace());
+                    } else {
+                        error!("{error:#}");
+                    }
+                    ExitCode::FAILURE
+                }
             }
-            ExitCode::FAILURE
         }
     }
 }
@@ -131,17 +167,46 @@ fn run(args: &Args) -> anyhow::Result<()> {
                 Err(_) => Err(anyhow!("Invalid command: {command:?}")),
             }
         }
-        Commands::Set {
-            select_key,
-            profile,
-        } => match select_key {
-            Some(select_key) => {
-                let exporter = Exporter::new(config, shell);
-                exporter.print_export_commands(select_key, profile.as_deref())
+        Commands::Run {
+            selection_args:
+                SelectionArgs {
+                    select_key,
+                    profile,
+                },
+            command,
+        } => {
+            let [program, arguments @ ..] = command.as_slice() else {
+                // This *shouldn't* be possible because we marked the argument
+                // as required, so clap should reject an empty command
+                bail!("Empty command")
+            };
+            let exporter = Exporter::new(config, shell);
+            let environment =
+                exporter.load_environment(select_key, profile.as_deref())?;
+
+            info!("Executing {program:?} {arguments:?} with extra environment {environment}");
+            let status = Command::new(program)
+                .args(arguments)
+                .envs(environment.iter_unmasked())
+                .status()?;
+
+            if status.success() {
+                Ok(())
+            } else {
+                // Forward exit code to user
+                Err(ExitCodeError::from(&status).into())
             }
-            None => Err(config
-                .get_suggestion_error("No variable or application provided.")),
-        },
+        }
+        Commands::Set {
+            selection_args:
+                SelectionArgs {
+                    select_key,
+                    profile,
+                },
+        } => {
+            let exporter = Exporter::new(config, shell);
+            exporter.print_export_commands(select_key, profile.as_deref())
+        }
         Commands::Show => {
             println!("Shell: {}", shell.path.to_string_lossy());
             println!();

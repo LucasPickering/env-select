@@ -24,36 +24,48 @@ impl Exporter {
         Self { config, shell }
     }
 
+    /// Build an [Environment] by loading an option for the given select key
+    /// (variable or application). If a default value/profile is given, load
+    /// that. If not, ask the user for select a value/profile via a TUI
+    /// prompt.
+    pub fn load_environment(
+        &self,
+        select_key: &str,
+        default: Option<&str>,
+    ) -> anyhow::Result<Environment> {
+        // Check for single variable first
+        if let Some(options) = self.config.variables.get(select_key) {
+            Environment::from_variable(
+                &self.shell,
+                select_key.into(),
+                self.load_variable(select_key, default, options)?,
+            )
+        }
+        // Check for applications next
+        else if let Some(application) =
+            self.config.applications.get(select_key)
+        {
+            let profile = self.load_profile(application, default)?;
+            Environment::from_profile(&self.shell, profile)
+        } else {
+            // Didn't match anything :(
+            Err(self.config.get_suggestion_error(&format!(
+                "No known variable or application by the name `{select_key}`."
+            )))
+        }
+    }
+
     /// Print the export command, and if apppropriate, tell the user about a
     /// sick pro tip.
     pub fn print_export_commands(
         &self,
         select_key: &str,
-        profile_name: Option<&str>,
+        default: Option<&str>,
     ) -> anyhow::Result<()> {
         // Check for single variable first
-        let environment =
-            if let Some(options) = self.config.variables.get(select_key) {
-                Environment::from_variable(
-                    &self.shell,
-                    select_key.into(),
-                    self.load_variable(select_key, profile_name, options)?,
-                )
-            }
-            // Check for applications next
-            else if let Some(application) =
-                self.config.applications.get(select_key)
-            {
-                let profile = self.load_profile(application, profile_name)?;
-                Environment::from_profile(&self.shell, profile)
-            } else {
-                // Didn't match anything :(
-                Err(self.config.get_suggestion_error(&format!(
-                "No known variable or application by the name `{select_key}`."
-            )))
-            }?;
+        let environment = self.load_environment(select_key, default)?;
 
-        self.shell.export(&environment);
+        self.shell.print_export(&environment);
 
         // Tell the user what we exported, on stderr so it doesn't interfere
         // with shell piping.
