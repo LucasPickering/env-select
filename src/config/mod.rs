@@ -80,20 +80,20 @@ pub struct ValueSourceInner {
 /// The various kinds of supported value sources. This will only hold data
 /// that's specific to each kind.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum ValueSourceKind {
     /// A plain string value
+    #[serde(rename = "literal")]
     Literal { value: String },
     /// A native command (program+arguments) that will be executed at runtime
     /// to get the variable's value. Useful for values that change, secrets,
     /// etc.
+    #[serde(rename = "command")]
     NativeCommand { command: NativeCommand },
     /// A command that will be executed via the shell. Allows access to
     /// aliases, pipes, etc.
-    ShellCommand {
-        #[serde(rename = "shell")]
-        command: String,
-    },
+    #[serde(rename = "shell")]
+    ShellCommand { command: String },
 }
 
 /// A native command is a program name/path, with zero or more arguments. This
@@ -123,7 +123,7 @@ impl TryFrom<Vec<String>> for NativeCommand {
                 arguments: value,
             })
         } else {
-            Err(anyhow!("Native command must have at least one element"))
+            Err(anyhow!("Command array must have at least one element"))
         }
     }
 }
@@ -246,17 +246,17 @@ mod tests {
 [vars]
 PASSWORD = [
     "hunter2",
-    {value = "secret-but-not-really", sensitive = true},
-    {shell = "echo secret_password | base64", sensitive = true},
+    {type = "literal", value = "secret-but-not-really", sensitive = true},
+    {type = "shell", command = "echo secret_password | base64", sensitive = true},
 ]
-TEST_VARIABLE = ["abc", {command = ["echo", "def"]}]
+TEST_VARIABLE = ["abc", {type = "command", command = ["echo", "def"]}]
 
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 [apps.server.secret]
-SERVICE1 = {value = "secret", sensitive = true}
-SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
+SERVICE1 = {type = "literal", value = "secret", sensitive = true}
+SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
 
 [apps.empty]
     "#;
@@ -410,6 +410,8 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
             &literal_sensitive("abc").0,
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
+                Token::Str("literal"),
                 Token::Str("value"),
                 Token::Str("abc"),
                 Token::Str("sensitive"),
@@ -420,13 +422,13 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
 
         // Can't parse non-strings
         // https://github.com/LucasPickering/env-select/issues/16
-        assert_de_tokens_error::<ValueSourceKind>(
+        assert_de_tokens_error::<ValueSource>(
             &[Token::I32(16)],
-            "data did not match any variant of untagged enum ValueSourceKind",
+            "invalid type: integer `16`, expected string or map",
         );
-        assert_de_tokens_error::<ValueSourceKind>(
+        assert_de_tokens_error::<ValueSource>(
             &[Token::Bool(true)],
-            "data did not match any variant of untagged enum ValueSourceKind",
+            "invalid type: boolean `true`, expected string or map",
         );
     }
 
@@ -434,9 +436,11 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
     fn test_parse_native_command() {
         // Default native command
         assert_de_tokens(
-            &native("echo", ["test"], false).0,
+            &native("echo", ["test"], false),
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
+                Token::Str("command"),
                 Token::Str("command"),
                 Token::Seq { len: Some(2) },
                 Token::Str("echo"),
@@ -451,6 +455,8 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
             &native("echo", ["test"], true).0,
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
+                Token::Str("command"),
                 Token::Str("command"),
                 Token::Seq { len: Some(2) },
                 Token::Str("echo"),
@@ -463,17 +469,17 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
         );
 
         // Empty command - error
-        // This error message sucks but we'll have to override Deserialize for
-        // all of CommandDefinition to fix it
         assert_de_tokens_error::<ValueSourceKind>(
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
+                Token::Str("command"),
                 Token::Str("command"),
                 Token::Seq { len: Some(0) },
                 Token::SeqEnd,
                 Token::MapEnd,
             ],
-            "data did not match any variant of untagged enum ValueSourceKind",
+            "Command array must have at least one element",
         );
     }
 
@@ -481,10 +487,12 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
     fn test_parse_shell_command() {
         // Regular shell command
         assert_de_tokens(
-            &shell("echo test", false).0,
+            &shell("echo test", false),
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
                 Token::Str("shell"),
+                Token::Str("command"),
                 Token::Str("echo test"),
                 Token::MapEnd,
             ],
@@ -495,7 +503,9 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
             &shell("echo test", true).0,
             &[
                 Token::Map { len: None },
+                Token::Str("type"),
                 Token::Str("shell"),
+                Token::Str("command"),
                 Token::Str("echo test"),
                 Token::Str("sensitive"),
                 Token::Bool(true),
@@ -504,53 +514,17 @@ SERVICE2 = {command = ["echo", "also-secret"], sensitive = true}
         );
     }
 
-    /// If multiple value sources are specified, the earlier ones in the enum
-    /// definition take precedence
     #[test]
-    fn test_parse_multiple_value_sources() {
-        assert_de_tokens(
-            &literal("abc").0,
+    fn test_parse_unknown_type() {
+        assert_de_tokens_error::<ValueSource>(
             &[
                 Token::Map { len: None },
-                Token::Str("value"),
-                Token::Str("abc"),
-                // Values here are ignored entirely
-                Token::Str("command"),
-                Token::Str("bad type"),
-                Token::Str("shell"),
-                Token::Str("echo test"),
+                Token::Str("type"),
+                Token::Str("unknown"),
                 Token::MapEnd,
             ],
-        );
-
-        // `value` takes precedence because it appears first in ValueSourceKind
-        assert_de_tokens(
-            &literal("abc").0,
-            &[
-                Token::Map { len: None },
-                Token::Str("shell"),
-                Token::Str("echo test"),
-                Token::Str("value"),
-                Token::Str("abc"),
-                Token::MapEnd,
-            ],
-        );
-
-        // Invalid values
-        assert_de_tokens(
-            &shell("echo test", false).0,
-            &[
-                Token::Map { len: None },
-                // First two are skipped because of incorrect types
-                Token::Str("command"),
-                Token::Str("bad type"),
-                Token::Str("value"),
-                Token::I32(6),
-                Token::Str("shell"),
-                Token::Str("echo test"),
-                Token::MapEnd,
-            ],
-        );
+            "unknown variant `unknown`, expected one of `literal`, `command`, `shell`",
+        )
     }
 
     #[test]
