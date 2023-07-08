@@ -97,12 +97,15 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
 
+      - name: Install rustup target
+        run: rustup target add ${{ matrix.target }}
+
       - name: Build release binary
-        run: cargo build --verbose --release
+        run: cargo build --verbose --release --target ${{ matrix.target }}
 
       - name: Strip release binary (linux and macos)
-        if: matrix.build == 'linux' || matrix.build == 'macos'
-        run: strip "target/release/env-select"
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
+        run: strip "target/${{ matrix.target }}/release/env-select"
 
       - name: Build archive
         shell: bash
@@ -113,11 +116,11 @@ jobs:
           cp {README.md,LICENSE} "$staging/"
 
           if [ "${{ matrix.os }}" = "windows-2019" ]; then
-            cp target/release/env-select.exe "$staging"
+            cp target/${{ matrix.target }}/release/env-select.exe "$staging"
             7z a "$staging.zip" "$staging"
             echo "ASSET=$staging.zip" >> $GITHUB_ENV
           else
-            cp target/release/env-select "$staging"
+            cp target/${{ matrix.target }}/release/env-select "$staging"
             tar czf "$staging.tar.gz" "$staging"
             echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
           fi
