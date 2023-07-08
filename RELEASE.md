@@ -11,3 +11,5 @@
 - Update the draft release with patch notes
 - Wait for the release CI jobs to finish
 - Publish the release
+- Update distribution packages
+  - [brew](https://github.com/LucasPickering/homebrew-tap/blob/main/Formula/env-select.rb) - Update `version` and `sha256` sums
