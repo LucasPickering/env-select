@@ -271,6 +271,18 @@ impl Display for NativeCommand {
     }
 }
 
+// This makes it more ergonomic to call execute_native
+impl<'a, S: Into<String>, I: IntoIterator<Item = &'a str>> From<(S, I)>
+    for NativeCommand
+{
+    fn from((program, arguments): (S, I)) -> Self {
+        Self {
+            program: program.into(),
+            arguments: arguments.into_iter().map(|s| s.to_owned()).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

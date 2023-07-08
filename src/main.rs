@@ -208,7 +208,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
             exporter.print_export_commands(select_key, profile.as_deref())
         }
         Commands::Show => {
-            println!("Shell: {}", shell.path.to_string_lossy());
+            println!("Shell: {}", shell.kind);
             println!();
             println!("{}", toml::to_string(&config)?);
             Ok(())
