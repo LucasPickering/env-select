@@ -1,8 +1,5 @@
 use crate::{
-    config::{
-        Application, Config, NativeCommand, Profile, ValueSource,
-        ValueSourceKind,
-    },
+    config::{Application, Config, Profile, ValueSource, ValueSourceKind},
     console,
     shell::Shell,
 };
@@ -186,9 +183,9 @@ impl Environment {
             // Plain value
             ValueSourceKind::Literal { value } => value,
             // Run a program+args locally
-            ValueSourceKind::NativeCommand {
-                command: NativeCommand { program, arguments },
-            } => Shell::execute_native(program, &arguments)?,
+            ValueSourceKind::NativeCommand { command } => {
+                Shell::execute_native(command)?
+            }
             // Run a program+args in a kubernetes pod/container
             ValueSourceKind::KubernetesCommand {
                 command,

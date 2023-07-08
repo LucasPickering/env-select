@@ -18,8 +18,12 @@ const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 /// functionality around executing commands.
 #[derive(Clone, Debug)]
 pub struct Shell {
-    pub path: PathBuf,
     pub kind: ShellKind,
+    /// Path to the shell. Only populated if the shell is detected from $SHELL,
+    /// because then it's easily available. We keep this as String instead of
+    /// PathBuf because it's loaded from a string anyway, and it reduces the
+    /// amount of boilerplate we need.
+    pub path: Option<String>,
 }
 
 /// A supported kind of shell
@@ -33,30 +37,26 @@ pub enum ShellKind {
 impl Shell {
     /// Detect the current shell from the $SHELL variable.
     pub fn detect() -> anyhow::Result<Self> {
-        let path = PathBuf::from(env::var("SHELL")?);
-        debug!("Detected shell path from $SHELL: {path:?}");
-        let shell_name = path
+        let path = env::var("SHELL")?;
+        debug!("Detected shell path from $SHELL: {path}");
+        let path_buf = PathBuf::from(&path);
+        let shell_name = path_buf
             .file_name()
             .and_then(OsStr::to_str)
-            .ok_or(anyhow!("Failed to read shell type from path: {path:?}"))?;
+            .ok_or(anyhow!("Failed to read shell type from path: {path}"))?;
         let kind = ShellKind::from_str(shell_name, true)
             .map_err(|message| anyhow!("{}", message))?;
         info!("Detected shell type: {kind}");
-        Ok(Self { path, kind })
+        Ok(Self {
+            path: Some(path),
+            kind,
+        })
     }
 
-    /// Find the shell from the given type, using `which`. This requires the
-    /// shell to be in the user's $PATH.
+    /// Create a shell of the given kind. Since no path is given, we'll just
+    /// hope it's in PATH if we ever need to execute it.
     pub fn from_kind(kind: ShellKind) -> anyhow::Result<Self> {
-        debug!("Detecting shell of type {kind}");
-        let output = Self::execute_native("which", &[kind.to_string()])
-            .with_context(|| {
-                format!(
-                    "Error finding shell of type {kind}. Is it in your $PATH?"
-                )
-            })?;
-        let path = PathBuf::from(output.trim());
-        Ok(Self { path, kind })
+        Ok(Self { path: None, kind })
     }
 
     /// Print a valid shell script that will initialize the `es` wrapper as
@@ -95,31 +95,40 @@ impl Shell {
         }
     }
 
-    /// Execute a program with the given arguments, and return the stdout value.
-    pub fn execute_native(
-        program: impl AsRef<OsStr> + Debug,
-        arguments: &[impl AsRef<OsStr> + Debug],
-    ) -> anyhow::Result<String> {
-        info!("Executing {program:?} {arguments:?}");
+    /// Execute a command in this shell, and return the stdout value.
+    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
+        // Use the full shell path if we have it. Otherwise, just pass the
+        // shell name and hope it's in PATH
+        let shell_executable =
+            self.path.clone().unwrap_or_else(|| self.kind.to_string());
+        Self::execute_native((shell_executable, ["-c", command]))
+    }
 
-        let output = Command::new(&program)
-            .args(arguments)
+    /// Execute a program with the given arguments, and return the stdout value.
+    pub fn execute_native<C: Into<NativeCommand>>(
+        command: C,
+    ) -> anyhow::Result<String> {
+        let command: NativeCommand = command.into();
+        info!("Executing {command}");
+
+        let output = Command::new(&command.program)
+            .args(&command.arguments)
             // Forward stderr to the user, in case something goes wrong
             .stderr(Stdio::inherit())
             .output()
-            .with_context(|| {
-                format!("Error executing {program:?} {arguments:?}")
-            })?;
+            .with_context(|| format!("Error executing {command}"))?;
         // TODO Replace with ExitStatus::exit_ok
         // https://github.com/rust-lang/rust/issues/84908
         if output.status.success() {
             Ok(String::from_utf8(output.stdout)
-                .context("Error decoding output for command `{command}`")?
+                .with_context(|| {
+                    format!("Error decoding output for {command}")
+                })?
                 .trim_end()
                 .to_string())
         } else {
             Err(anyhow!(
-                "{program:?} {arguments:?} failed with exit code {}",
+                "{command} failed with exit code {}",
                 output
                     .status
                     .code()
@@ -127,11 +136,6 @@ impl Shell {
                     .unwrap_or_else(|| "unknown".into())
             ))
         }
-    }
-
-    /// Execute a command in this shell, and return the stdout value.
-    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
-        Self::execute_native(&self.path, &["-c", command])
     }
 
     /// Execute a command in a kubernetes pod, and return the output
@@ -163,7 +167,7 @@ impl Shell {
         if let Some(namespace) = namespace {
             kgp_arguments.extend(["-n", namespace]);
         }
-        let pod_output = Self::execute_native("kubectl", &kgp_arguments)?;
+        let pod_output = Self::execute_native(("kubectl", kgp_arguments))?;
         let lines = pod_output.lines().collect::<Vec<_>>();
         debug!("Found pods: {lines:?}");
         let pod_name = match lines.as_slice() {
@@ -193,7 +197,7 @@ impl Shell {
         // Add the actual command
         kexec_arguments.extend(["--", &command.program]);
         kexec_arguments.extend(command.arguments.iter().map(String::as_str));
-        Self::execute_native("kubectl", &kexec_arguments)
+        Self::execute_native(("kubectl", kexec_arguments))
     }
 }
 
