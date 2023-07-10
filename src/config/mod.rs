@@ -34,7 +34,7 @@ pub struct Config {
 /// Different colors of the same car, so to speak.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Application {
-    #[serde(flatten)]
+    #[serde(default)]
     pub profiles: IndexMap<String, Profile>,
 }
 
@@ -278,10 +278,10 @@ mod tests {
     };
 
     const CONFIG: &str = r#"
-[applications.server]
+[applications.server.profiles]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-[applications.server.secret]
+[applications.server.profiles.secret]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
 SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
 SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
