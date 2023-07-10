@@ -23,7 +23,7 @@ Easily switch between predefined values for arbitrary environment variables Feat
 
 ```toml
 # .env-select.toml
-[applications.server]
+[applications.server.profiles]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
