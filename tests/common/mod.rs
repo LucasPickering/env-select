@@ -1,7 +1,7 @@
 use assert_cmd::Command;
 use rstest::fixture;
 use rstest_reuse::{self, *};
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
 /// Command to run env-select
 #[fixture]
@@ -54,21 +54,8 @@ pub fn execute_script(
         "
     );
 
-    // Add the directory containing env-select to the $PATH
-    let env_select_path = PathBuf::from(env!("CARGO_BIN_EXE_env-select"));
-    let env_select_dir = env_select_path.parent().unwrap();
     let shell = shell_path(shell_kind);
     let mut command = Command::new(&shell);
-    command
-        .env("SHELL", &shell)
-        .env(
-            "PATH",
-            format!(
-                "{}:{}",
-                env::var("PATH").unwrap(),
-                env_select_dir.display()
-            ),
-        )
-        .args(["-c", &script]);
+    command.env("SHELL", &shell).args(["-c", &script]);
     command
 }

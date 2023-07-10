@@ -1,8 +1,8 @@
 es () {
-    env-select test $@ > /dev/null 2>&1
+    ENV_SELECT_BINARY test $@ > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         tmp_file=$(mktemp)
-        env-select $@ > $tmp_file
+        ENV_SELECT_BINARY $@ > $tmp_file
         return_code=$?
         if [ $return_code -eq 0 ]; then
             source $tmp_file
@@ -10,7 +10,7 @@ es () {
         rm $tmp_file
         return $return_code
     else
-        env-select $@
+        ENV_SELECT_BINARY $@
         return $?
     fi
 }
