@@ -10,19 +10,12 @@ use rstest_reuse::{self, *};
 #[apply(all_shells)]
 fn test_subcommand_run(shell_kind: &str) {
     // We need ||true because printenv fails when given unknown vars
-    let printenv_command = "printenv \
-        TEST_VARIABLE \
-        PROFILE_VARIABLE_1 \
-        PROFILE_VARIABLE_2 \
-        PROFILE_VARIABLE_3 \
-        PROFILE_VARIABLE_4 || true
-    ";
+    let printenv_command = "printenv VARIABLE1 VARIABLE2 VARIABLE3 VARIABLE4";
     execute_script(
         &format!(
             "
-            es run TEST_VARIABLE success -- {printenv_command}
-            echo
             es run integration-tests p1 -- {printenv_command}
+            echo Empty: $VARIABLE1
             "
         ),
         shell_kind,
@@ -30,5 +23,5 @@ fn test_subcommand_run(shell_kind: &str) {
     )
     .assert()
     .success()
-    .stdout("success\n\nabc\ndef\nghi\njkl\n");
+    .stdout("abc\ndef\nghi\njkl\nEmpty:\n");
 }

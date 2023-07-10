@@ -12,7 +12,6 @@ pub trait Merge {
 
 impl Merge for Config {
     fn merge(&mut self, other: Self) {
-        self.variables.merge(other.variables);
         self.applications.merge(other.applications);
     }
 }

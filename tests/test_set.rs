@@ -14,19 +14,17 @@ fn test_subcommand_set(
 ) {
     execute_script(
         "
-        es set TEST_VARIABLE success
         es set integration-tests p1
         echo -n \
-            $TEST_VARIABLE \
-            $PROFILE_VARIABLE_1 \
-            $PROFILE_VARIABLE_2 \
-            $PROFILE_VARIABLE_3 \
-            $PROFILE_VARIABLE_4
+            $VARIABLE1 \
+            $VARIABLE2 \
+            $VARIABLE3 \
+            $VARIABLE4
         ",
         shell_kind,
         detect_shell,
     )
     .assert()
     .success()
-    .stdout("success abc def ghi jkl");
+    .stdout("abc def ghi jkl");
 }

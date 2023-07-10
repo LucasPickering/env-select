@@ -78,18 +78,16 @@ enum Commands {
     Show,
 }
 
-/// Arguments required for any subcommand that allows variable/profile
+/// Arguments required for any subcommand that allows applcation/profile
 /// selection.
 #[derive(Clone, Debug, clap::Args)]
 struct SelectionArgs {
-    /// The name of the variable or application to select a value for
-    #[arg(name = "VARIABLE|APPLICATION")]
-    // TODO make this optional and allow selecting variable/application in TUI
-    select_key: String,
+    /// The name of the application to select a profile for
+    // TODO make this optional and allow selecting application interactively
+    application: String,
 
     /// Profile to select. If omitted, an interactive prompt will be shown to
-    /// select between possible options. For single variables, this will be
-    /// used as the exported value.
+    /// select between possible options.
     profile: Option<String>,
 }
 
@@ -170,7 +168,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
         Commands::Run {
             selection_args:
                 SelectionArgs {
-                    select_key,
+                    application: select_key,
                     profile,
                 },
             command,
@@ -200,7 +198,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
         Commands::Set {
             selection_args:
                 SelectionArgs {
-                    select_key,
+                    application: select_key,
                     profile,
                 },
         } => {

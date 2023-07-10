@@ -19,7 +19,7 @@ $(echo prd) # Command
 
 ### Variable Mapping
 
-A key and a value source. Variables can either be selected independently (via the `vars` key in the config) or be part of a profile with other variables.
+A key mapped to a value source. Variables are selected as part of a profile.
 
 ```sh
 SERVICE1=dev
@@ -53,9 +53,6 @@ SERVICE2=also-prd
 First, define `.env-select.toml`. This is where you'll specify possible options for each variable. Here's an example:
 
 ```toml
-[vars]
-TEST_VARIABLE = ["abc", "def"]
-
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
@@ -67,18 +64,6 @@ prd = {DATABASE = "prd", DB_USER = "root", DB_PASSWORD = "greatpw"}
 ```
 
 Now, you can easily switch between the defined values with `es`.
-
-### Select a single variable
-
-We can select between multiple values for a single variable, in this case `TEST_VARIABLE`. This is a shorthand for defining an application with multiple single-variable profiles.
-
-```sh
-> es set TEST_VARIABLE
-  TEST_VARIABLE=abc
-❯ TEST_VARIABLE=def
-> echo $TEST_VARIABLE
-def
-```
 
 ### Select a set of variables
 
@@ -98,7 +83,7 @@ SERVICE2=also-prd
 dev also-dev
 ```
 
-If you know the name of the profile you want to select, you can also skip the prompt by providing it directly to the command:
+If you know the name of the profile you want to select, you can skip the prompt by providing it directly to the command:
 
 ```sh
 > es set server dev
@@ -185,23 +170,11 @@ command = ["sh", "-c", "env | grep DB_PASSWORD | sed -E 's/.+=(.+)/\1/'"]
 
 ## Configuration
 
-Configuration is defined in [TOML](https://toml.io/en/). There are two main tables in the config, each defined by a fixed key:
-
-- Single variables, under the `vars` key
-  - Each table entry is a mapping from `VARIABLE_NAME` to a list of possible value sources
-- [Applications](#application), under the `apps` key
-  - Sub-tables define each [profiles](#profile)
-  - Each profile consists of a mapping of `VARIABLE = <value source>`
+Configuration is defined in [TOML](https://toml.io/en/). The main table in the config is `apps`. Each sub-table is a profile. Each profile consists of a mapping of `VARIABLE = <value source>`
 
 Let's see this in action:
 
 ```toml
-# Single variables
-[vars]
-TEST_VARIABLE = ["abc", "def", {value = "secret", sensitive = true}]
-OTHER_VARIABLE = ["potato", "tomato"]
-
-# Applications
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
@@ -242,23 +215,16 @@ The `dev` profile excludes the `DB_PASSWORD` variable. Beware though, whenever s
 
 ### Cascading configs
 
-On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es set TEST_VARIABLE` in `~/code/`:
+On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es set SERVICE1` in `~/code/`:
 
 ```toml
 # ~/code/.env-select.toml
-[vars]
-TEST_VARIABLE = ["abc", "def"]
-
 [apps.server]
 dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
 ```
 
 ```toml
 # ~/.env-select.toml
-[vars]
-TEST_VARIABLE = ["ghi"]
-OTHER_VARIABLE = ["potato", "tomato"]
-
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
@@ -268,11 +234,6 @@ then our resulting config, at execution time, will look like:
 
 ```toml
 # Note: this config never exists in the file system, only in memory during program execution
-[vars]
-# Variable lists get appended together
-TEST_VARIABLE = ["abc", "def", "ghi"]
-OTHER_VARIABLE = ["potato", "tomato"]
-
 [apps.server]
 # From ~/code/.env-select.toml (higher precedence)
 dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
@@ -289,14 +250,21 @@ To see where env-select is loading configs from, and how they are being merged t
 There are multiple types of value sources. The type used for a value source is determined by the `type` field. For example:
 
 ```toml
-# All of these examples will generate the same exported value
-[vars]
-GREETING = [
-  "hello", # Literal - shorthand (most common)
-  {type = "literal", value = "hello!"}, # Literal - expanded form
-  {type = "command", command = ["echo", "hello!"]}, # Native command
-  {type = "shell", command = "echo hello"}, # Shell command
-]
+# All of these profiles will generate the same exported value for GREETING
+
+# Literal shorthand - most common
+[apps.example.shorthand]
+GREETING = "hello"
+
+# Literal expanded form - generally not needed
+[apps.example.literal]
+GREETING = {type = "literal", value = "hello"},
+
+[apps.example.command]
+GREETING = {type = "command", command = ["echo", "hello"]}, # Native command
+
+[apps.example.shell]
+GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
 ```
 
 #### Value Source Types

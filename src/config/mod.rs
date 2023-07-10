@@ -3,7 +3,7 @@ mod merge;
 
 use crate::config::merge::Merge;
 use anyhow::{anyhow, Context};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,14 +21,6 @@ const FILE_NAME: &str = ".env-select.toml";
 /// This (hopefully) makes usage more intuitive for the use.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Config {
-    /// A set of possible values for individual variables. Each variable maps
-    /// to zero or more possible values, and the user can select from this
-    /// list for each variable *independently* of the other variables. We use
-    /// an ordered set here so the ordering from the user's file(s) is
-    /// maintained, but without duplicates.
-    #[serde(default, alias = "vars")]
-    pub variables: IndexMap<String, IndexSet<ValueSource>>,
-
     /// A set of named applications (as in, a use case, purpose, etc.). An
     /// application typically has one or more variables that control it, and
     /// each variable may multiple values to select between. Each value set
@@ -177,15 +169,8 @@ impl Config {
     /// profiles
     pub fn get_suggestion_error(&self, message: &str) -> anyhow::Error {
         anyhow!(
-            "{} Try one of the following:
-    Variables: {}
-    Applications: {}",
+            "{} Try one of the following: {}",
             message,
-            self.variables
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", "),
             self.applications
                 .keys()
                 .cloned()
@@ -293,20 +278,13 @@ mod tests {
     };
 
     const CONFIG: &str = r#"
-[vars]
-PASSWORD = [
-    "hunter2",
-    {type = "literal", value = "secret-but-not-really", sensitive = true},
-    {type = "shell", command = "echo secret_password | base64", sensitive = true},
-]
-TEST_VARIABLE = ["abc", {type = "command", command = ["echo", "def"]}]
-
 [apps.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 [apps.server.secret]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
 SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
+SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
 
 [apps.empty]
     "#;
@@ -377,24 +355,6 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
     #[test]
     fn test_parse_config() {
         let expected = Config {
-            variables: map([
-                (
-                    "TEST_VARIABLE",
-                    IndexSet::from([
-                        literal("abc"),
-                        native("echo", ["def"], false),
-                    ]),
-                ),
-                (
-                    "PASSWORD",
-                    IndexSet::from([
-                        literal("hunter2"),
-                        literal_sensitive("secret-but-not-really"),
-                        shell("echo secret_password | base64", true),
-                    ]),
-                ),
-            ]),
-
             applications: map([
                 (
                     "server",
@@ -431,6 +391,13 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
                                             native(
                                                 "echo",
                                                 ["also-secret"],
+                                                true,
+                                            ),
+                                        ),
+                                        (
+                                            "SERVICE3",
+                                            shell(
+                                                "echo secret_password | base64",
                                                 true,
                                             ),
                                         ),
@@ -644,10 +611,6 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
     #[test]
     fn test_config_merge() {
         let mut config1 = Config {
-            variables: map([
-                ("VAR1", set([literal("val1"), literal("val2")])),
-                ("VAR2", set([literal("val1")])),
-            ]),
             applications: map([
                 (
                     "app1",
@@ -691,7 +654,6 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
             ]),
         };
         let config2 = Config {
-            variables: map([("VAR1", set([literal("val3")]))]),
             applications: map([
                 // Merged into existing
                 (
@@ -738,17 +700,6 @@ SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = tru
         assert_eq!(
             config1,
             Config {
-                variables: map([
-                    (
-                        "VAR1",
-                        set([
-                            literal("val1"),
-                            literal("val2"),
-                            literal("val3")
-                        ])
-                    ),
-                    ("VAR2", set([literal("val1")])),
-                ]),
                 applications: map([
                     (
                         "app1",
