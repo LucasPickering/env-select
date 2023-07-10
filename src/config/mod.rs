@@ -25,7 +25,7 @@ pub struct Config {
     /// application typically has one or more variables that control it, and
     /// each variable may multiple values to select between. Each value set
     /// is known as a "profile".
-    #[serde(default, rename = "apps")]
+    #[serde(default)]
     pub applications: IndexMap<String, Application>,
 }
 
@@ -278,15 +278,15 @@ mod tests {
     };
 
     const CONFIG: &str = r#"
-[apps.server]
+[applications.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-[apps.server.secret]
+[applications.server.secret]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
 SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
 SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
 
-[apps.empty]
+[applications.empty]
     "#;
 
     /// Helper for building an IndexMap
