@@ -10,6 +10,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+const BINARY_REPLACEMENT_KEY: &str = "ENV_SELECT_BINARY";
 const BASH_WRAPPER: &str = include_str!("../shells/es.bash");
 const ZSH_WRAPPER: &str = include_str!("../shells/es.zsh");
 const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
@@ -62,11 +63,18 @@ impl Shell {
     /// Print a valid shell script that will initialize the `es` wrapper as
     /// well as whatever other initialization is needed.
     pub fn print_init_script(&self) -> anyhow::Result<()> {
-        let wrapper_src = match self.kind {
+        let wrapper_template = match self.kind {
             ShellKind::Bash => BASH_WRAPPER,
             ShellKind::Zsh => ZSH_WRAPPER,
             ShellKind::Fish => FISH_WRAPPER,
         };
+
+        // Inject the path of the current binary into the script. This prevents
+        // any need to modify PATH
+        let wrapper_src = wrapper_template.replace(
+            BINARY_REPLACEMENT_KEY,
+            &env::current_exe()?.display().to_string(),
+        );
 
         println!("{wrapper_src}");
 
