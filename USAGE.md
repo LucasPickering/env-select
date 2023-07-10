@@ -53,11 +53,11 @@ SERVICE2=also-prd
 First, define `.env-select.toml`. This is where you'll specify possible options for each variable. Here's an example:
 
 ```toml
-[apps.server]
+[applications.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 
-[apps.db]
+[applications.db]
 dev = {DATABASE = "dev", DB_USER = "root",  DB_PASSWORD = "badpw"}
 stg = {DATABASE = "stg", DB_USER = "root", DB_PASSWORD = "goodpw"}
 prd = {DATABASE = "prd", DB_USER = "root", DB_PASSWORD = "greatpw"}
@@ -129,7 +129,7 @@ Make sure to use **single** quotes in those case, otherwise `$SERVICE1` will be 
 You can define variables whose values are provided dynamically, by specifying a command to execute rather than a static value. This allows you to provide values that can change over time, or secrets that you don't want appearing in the file. For example:
 
 ```toml
-[apps.db.dev]
+[applications.db.dev]
 DATABASE = "dev"
 DB_USER = "root"
 DB_PASSWORD = {type = "command", command = ["cat", "password.txt"], sensitive = true}
@@ -140,7 +140,7 @@ When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value wil
 By default, the program (the first argument in the list) is executed directly by env-select, and passed the rest of the list as arguments. If you want to execute a command in your shell, you can use the `shell` type instead. This will give access to shell features such as aliases and pipes. For example:
 
 ```toml
-[apps.db.dev]
+[applications.db.dev]
 DATABASE = "dev"
 DB_USER = "root"
 DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = true}
@@ -151,12 +151,12 @@ DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = t
 Ever had a secret in a Kubernetes pod that you want to fetch easily? The `kubernetes` value source lets you run any command in a kubernetes pod.
 
 ```toml
-[apps.db.dev]
+[applications.db.dev]
 DATABASE = "dev"
 DB_USER = "root"
 DB_PASSWORD = {type = "kubernetes", namespace = "development", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
 
-[apps.db.prd]
+[applications.db.prd]
 DATABASE = "prd"
 DB_USER = "root"
 DB_PASSWORD = {type = "kubernetes", namespace = "production", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
@@ -170,29 +170,29 @@ command = ["sh", "-c", "env | grep DB_PASSWORD | sed -E 's/.+=(.+)/\1/'"]
 
 ## Configuration
 
-Configuration is defined in [TOML](https://toml.io/en/). The main table in the config is `apps`. Each sub-table is a profile. Each profile consists of a mapping of `VARIABLE = <value source>`
+Configuration is defined in [TOML](https://toml.io/en/). The main table in the config is `applications`. Each sub-table is a profile. Each profile consists of a mapping of `VARIABLE = <value source>`
 
 Let's see this in action:
 
 ```toml
-[apps.server]
+[applications.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 
 # This application has no profiles, but is still valid to configure
-[apps.empty]
+[applications.empty]
 
 # These profiles are big, so we can use full table syntax instead of the
 # inline syntax. This is purely stylistic; you can make your inline
 # tables as big as your heart desires. See https://toml.io/en/v1.0.0#table
-[apps.big.prof1]
+[applications.big.prof1]
 VAR1 = "yes"
 VAR2 = "yes"
 VAR3 = "no"
 VAR4 = "no"
 VAR5 = "yes"
 
-[apps.big.prof2]
+[applications.big.prof2]
 VAR1 = "no"
 VAR2 = "no"
 VAR3 = "no"
@@ -205,7 +205,7 @@ VAR5 = "no"
 Profiles within an app can define differing sets of variables, like so:
 
 ```toml
-[apps.db]
+[applications.db]
 dev = {DATABASE = "dev", DB_USER = "root"}
 stg = {DATABASE = "stg", DB_USER = "root", DB_PASSWORD = "goodpw"}
 prd = {DATABASE = "prd", DB_USER = "root", DB_PASSWORD = "greatpw"}
@@ -219,13 +219,13 @@ On every execution, env-select will scan the current directory for a file called
 
 ```toml
 # ~/code/.env-select.toml
-[apps.server]
+[applications.server]
 dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
 ```
 
 ```toml
 # ~/.env-select.toml
-[apps.server]
+[applications.server]
 dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
@@ -234,7 +234,7 @@ then our resulting config, at execution time, will look like:
 
 ```toml
 # Note: this config never exists in the file system, only in memory during program execution
-[apps.server]
+[applications.server]
 # From ~/code/.env-select.toml (higher precedence)
 dev = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
 # From ~/.env-select.toml (no value in ~/code/.env-select.toml)
@@ -253,17 +253,17 @@ There are multiple types of value sources. The type used for a value source is d
 # All of these profiles will generate the same exported value for GREETING
 
 # Literal shorthand - most common
-[apps.example.shorthand]
+[applications.example.shorthand]
 GREETING = "hello"
 
 # Literal expanded form - generally not needed
-[apps.example.literal]
+[applications.example.literal]
 GREETING = {type = "literal", value = "hello"},
 
-[apps.example.command]
+[applications.example.command]
 GREETING = {type = "command", command = ["echo", "hello"]}, # Native command
 
-[apps.example.shell]
+[applications.example.shell]
 GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
 ```
 
