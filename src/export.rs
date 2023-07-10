@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use atty::Stream;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use std::fmt::{Display, Formatter};
 
 /// Container to handle user selection and command generation. This is the core
@@ -27,28 +27,21 @@ impl Exporter {
     /// prompt.
     pub fn load_environment(
         &self,
-        select_key: &str,
-        default: Option<&str>,
+        application_name: &str,
+        profile_name: Option<&str>,
     ) -> anyhow::Result<Environment> {
-        // Check for single variable first
-        if let Some(options) = self.config.variables.get(select_key) {
-            Environment::from_variable(
-                &self.shell,
-                select_key.into(),
-                self.load_variable(select_key, default, options)?,
-            )
-        }
-        // Check for applications next
-        else if let Some(application) =
-            self.config.applications.get(select_key)
-        {
-            let profile = self.load_profile(application, default)?;
-            Environment::from_profile(&self.shell, profile)
-        } else {
-            // Didn't match anything :(
-            Err(self.config.get_suggestion_error(&format!(
-                "No known variable or application by the name `{select_key}`."
-            )))
+        // Check for the application
+        match self.config.applications.get(application_name) {
+            Some(application) => {
+                let profile = self.load_profile(application, profile_name)?;
+                Environment::from_profile(&self.shell, profile)
+            }
+            None => {
+                // Didn't match anything :(
+                Err(self.config.get_suggestion_error(&format!(
+                    "No known application by the name `{application_name}`."
+                )))
+            }
         }
     }
 
@@ -59,7 +52,6 @@ impl Exporter {
         select_key: &str,
         default: Option<&str>,
     ) -> anyhow::Result<()> {
-        // Check for single variable first
         let environment = self.load_environment(select_key, default)?;
 
         self.shell.print_export(&environment);
@@ -73,28 +65,6 @@ impl Exporter {
 
         console::print_installation_hint()?;
         Ok(())
-    }
-
-    /// Load a value for a single variable. The default value *can* be provided,
-    /// but that kinda defeats the purpose of env-select. If not, the user will
-    /// be prompted to select a value.
-    fn load_variable(
-        &self,
-        variable_name: &str,
-        default_value: Option<&str>,
-        options: &IndexSet<ValueSource>,
-    ) -> anyhow::Result<ValueSource> {
-        match default_value {
-            // This is kinda weird, why are you using env-select to just pass a
-            // single value? You could just run the shell command directly...
-            // Regardless, we might as well support this instead of ignoring it
-            // or throwing an error
-            Some(value) => Ok(ValueSource::from_literal(value)),
-            // The standard use case - prompt the user to pick a value
-            None => {
-                Ok(console::prompt_variable(variable_name, options)?.clone())
-            }
-        }
     }
 
     /// Load a profile for an application. If a profile name is given, that will
@@ -122,7 +92,7 @@ impl Exporter {
                     )
                 })
             }
-            // Show a prompt to ask the user which varset to use
+            // Show a prompt to ask the user which profile to use
             None => console::prompt_application(application),
         }
     }
@@ -138,17 +108,6 @@ struct ResolvedValue {
 }
 
 impl Environment {
-    /// Create a new environment from a single variable=value
-    fn from_variable(
-        shell: &Shell,
-        variable: String,
-        value_source: ValueSource,
-    ) -> anyhow::Result<Self> {
-        let mut environment = Self::default();
-        environment.resolve_variable(shell, variable, value_source)?;
-        Ok(environment)
-    }
-
     /// Create a new environment from a mapping of variable=value. This will
     /// resolve the value(s) if necessary.
     fn from_profile(shell: &Shell, profile: &Profile) -> anyhow::Result<Self> {
