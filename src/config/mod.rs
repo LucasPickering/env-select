@@ -1,9 +1,12 @@
 mod cereal;
+mod inheritance;
 mod merge;
+#[cfg(test)]
+mod tests;
 
 use crate::config::merge::Merge;
-use anyhow::{anyhow, Context};
-use indexmap::IndexMap;
+use anyhow::{anyhow, bail, Context};
+use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,6 +15,7 @@ use std::{
     fs,
     hash::Hash,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 const FILE_NAME: &str = ".env-select.toml";
@@ -26,7 +30,7 @@ pub struct Config {
     /// each variable may multiple values to select between. Each value set
     /// is known as a "profile".
     #[serde(default)]
-    pub applications: IndexMap<String, Application>,
+    pub applications: IndexMap<Name, Application>,
 }
 
 /// An application is a grouping of profiles. Each profile should be different
@@ -35,15 +39,36 @@ pub struct Config {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Application {
     #[serde(default)]
-    pub profiles: IndexMap<String, Profile>,
+    pub profiles: IndexMap<Name, Profile>,
 }
+
+/// An application or profile name. Newtype allows us to apply validation during
+/// deserialization.
+#[derive(Clone, Debug, Default, Serialize, Hash, Eq, PartialEq)]
+pub struct Name(String);
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Profile {
+    /// List of profiles that we'll inherit from. Last has precedence
+    #[serde(default)]
+    pub extends: IndexSet<ProfileReference>,
+
+    /// The meat
     #[serde(default)]
     pub variables: IndexMap<String, ValueSource>,
+}
+
+/// Pointer to a profile, relative to some "self" profile. (De)serializes as
+/// "[application/]profile"
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ProfileReference {
+    /// Application name. If omitted, the application of the "self" profile is
+    /// assumed
+    application: Option<Name>,
+    /// Profile name
+    profile: Name,
 }
 
 /// The source of an exported value. Can be a literal value or an embedded
@@ -114,29 +139,6 @@ pub struct NativeCommand {
     pub arguments: Vec<String>,
 }
 
-impl From<NativeCommand> for Vec<String> {
-    fn from(value: NativeCommand) -> Self {
-        let mut elements = value.arguments;
-        elements.insert(0, value.program); // O(n)! Spooky!
-        elements
-    }
-}
-
-impl TryFrom<Vec<String>> for NativeCommand {
-    type Error = anyhow::Error;
-
-    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
-        if !value.is_empty() {
-            Ok(Self {
-                program: value.remove(0),
-                arguments: value,
-            })
-        } else {
-            Err(anyhow!("Command array must have at least one element"))
-        }
-    }
-}
-
 impl Config {
     /// Load config from the current directory and all parents. Any config
     /// file in any directory in the hierarchy will be loaded and merged into
@@ -144,9 +146,7 @@ impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let mut config = Config::default();
 
-        // Iterate *backwards*, so that we go top->bottom in the dir tree.
-        // Lower files should have higher precedence.
-        for path in Self::get_all_files()?.iter().rev() {
+        for path in Self::get_all_files()?.iter() {
             debug!("Loading config from file {path:?}");
             let content = fs::read_to_string(path)
                 .with_context(|| format!("Error reading file {path:?}"))?;
@@ -161,7 +161,11 @@ impl Config {
             }
         }
 
-        debug!("Loaded config: {config:#?}");
+        trace!("Loaded config (pre-inheritance): {config:#?}");
+        // Resolve all `extends` fields
+        config.resolve_inheritance()?;
+
+        debug!("Loaded and resolved config: {config:#?}");
         Ok(config)
     }
 
@@ -171,16 +175,13 @@ impl Config {
         anyhow!(
             "{} Try one of the following: {}",
             message,
-            self.applications
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", "),
+            self.applications.display_keys(),
         )
     }
 
-    /// Starting at the current directory, walk *up* the tree and collect the
-    /// list of all config files.
+    /// Starting at the current directory, walk up the tree and collect the
+    /// list of all config files. Return the list of files from
+    /// **top-to-bottom**, so that the highest priority file comes last.
     fn get_all_files() -> anyhow::Result<Vec<PathBuf>> {
         let cwd = env::current_dir()?;
 
@@ -197,7 +198,98 @@ impl Config {
             search_dir = dir.parent();
         }
 
+        // Return top->bottom results
+        config_files.reverse();
         Ok(config_files)
+    }
+}
+
+impl Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// Validate application/profile name. We do a bit of sanity checking here to
+// prevent stuff that might be confusing, or collide with env-select features
+impl FromStr for Name {
+    type Err = anyhow::Error;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        if name.is_empty() {
+            bail!("Invalid name: empty string");
+        }
+
+        if name.starts_with(char::is_whitespace)
+            || name.ends_with(char::is_whitespace)
+        {
+            bail!("Invalid name: contains leading/trailing whitespace");
+        }
+
+        // Right now we only care about /, but the others might be useful later
+        let reserved = &['\\', '/', '*', '?', '!'];
+        if name.contains(reserved) {
+            bail!(
+                "Invalid name: contains one of reserved characters {}",
+                reserved.iter().collect::<String>()
+            );
+        }
+
+        Ok(Self(name.into()))
+    }
+}
+
+impl FromStr for ProfileReference {
+    type Err = anyhow::Error;
+
+    fn from_str(path: &str) -> Result<Self, Self::Err> {
+        // Path should be other "profile" or "application/profile". We lean on
+        // Name to do the bulk of validation. If there's multiple slashes, the
+        // latter will appear in the profile name and get rejected
+        match path.split_once('/') {
+            None => Ok(ProfileReference {
+                application: None,
+                profile: path.parse()?,
+            }),
+            Some((application, profile)) => Ok(ProfileReference {
+                application: Some(application.parse()?),
+                profile: profile.parse()?,
+            }),
+        }
+    }
+}
+
+impl Display for ProfileReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(application) = &self.application {
+            write!(f, "{application}/")?;
+        }
+        write!(f, "{}", self.profile)
+    }
+}
+
+// For serialization
+impl From<NativeCommand> for Vec<String> {
+    fn from(value: NativeCommand) -> Self {
+        let mut elements = value.arguments;
+        elements.insert(0, value.program); // O(n)! Spooky!
+        elements
+    }
+}
+
+// For deserialization
+impl TryFrom<Vec<String>> for NativeCommand {
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
+        if !value.is_empty() {
+            Ok(Self {
+                program: value.remove(0),
+                arguments: value,
+            })
+        } else {
+            Err(anyhow!("Command array must have at least one element"))
+        }
     }
 }
 
@@ -268,502 +360,18 @@ impl<'a, S: Into<String>, I: IntoIterator<Item = &'a str>> From<(S, I)>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{Application, Config, Profile, ValueSourceKind};
-    use indexmap::{IndexMap, IndexSet};
-    use serde_test::{
-        assert_de_tokens, assert_de_tokens_error, assert_tokens, Token,
-    };
+/// Itty bitty little helper trait for printing the keys of a map in a
+/// user-friendly format. Useful for showing application and profile options.
+pub trait DisplayKeys {
+    /// Print the keys of this map
+    fn display_keys(&self) -> String;
+}
 
-    const CONFIG: &str = r#"
-[applications.server.profiles.dev]
-variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
-[applications.server.profiles.prd]
-variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-
-[applications.server.profiles.secret.variables]
-SERVICE1 = {type = "literal", value = "secret", sensitive = true}
-SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
-SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
-
-[applications.empty]
-    "#;
-
-    /// Helper for building an IndexMap
-    fn map<V, const N: usize>(
-        items: [(&'static str, V); N],
-    ) -> IndexMap<String, V> {
-        items.into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
-    }
-
-    /// Helper for building an IndexMap
-    fn set<V: Hash + Eq, const N: usize>(items: [V; N]) -> IndexSet<V> {
-        IndexSet::from(items)
-    }
-
-    /// Helper to create a non-sensitive literal
-    fn literal(value: &str) -> ValueSource {
-        ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::Literal {
-                value: value.to_owned(),
-            },
-            sensitive: false,
-        })
-    }
-
-    /// Helper to create a sensitive literal
-    fn literal_sensitive(value: &str) -> ValueSource {
-        ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::Literal {
-                value: value.to_owned(),
-            },
-            sensitive: true,
-        })
-    }
-
-    /// Helper to create a native command
-    fn native<const N: usize>(
-        program: &str,
-        arguments: [&str; N],
-        sensitive: bool,
-    ) -> ValueSource {
-        ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::NativeCommand {
-                command: NativeCommand {
-                    program: program.into(),
-                    arguments: arguments
-                        .into_iter()
-                        .map(String::from)
-                        .collect(),
-                },
-            },
-            sensitive,
-        })
-    }
-
-    /// Helper to create a shell command
-    fn shell(command: &str, sensitive: bool) -> ValueSource {
-        ValueSource(ValueSourceInner {
-            kind: ValueSourceKind::ShellCommand {
-                command: command.to_owned(),
-            },
-            sensitive,
-        })
-    }
-
-    /// General catch-all test
-    #[test]
-    fn test_parse_config() {
-        let expected = Config {
-            applications: map([
-                (
-                    "server",
-                    Application {
-                        profiles: map([
-                            (
-                                "dev",
-                                Profile {
-                                    variables: map([
-                                        ("SERVICE1", literal("dev")),
-                                        ("SERVICE2", literal("also-dev")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "prd",
-                                Profile {
-                                    variables: map([
-                                        ("SERVICE1", literal("prd")),
-                                        ("SERVICE2", literal("also-prd")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "secret",
-                                Profile {
-                                    variables: map([
-                                        (
-                                            "SERVICE1",
-                                            literal_sensitive("secret"),
-                                        ),
-                                        (
-                                            "SERVICE2",
-                                            native(
-                                                "echo",
-                                                ["also-secret"],
-                                                true,
-                                            ),
-                                        ),
-                                        (
-                                            "SERVICE3",
-                                            shell(
-                                                "echo secret_password | base64",
-                                                true,
-                                            ),
-                                        ),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
-                ),
-                (
-                    "empty",
-                    Application {
-                        profiles: IndexMap::new(),
-                    },
-                ),
-            ]),
-        };
-        assert_eq!(toml::from_str::<Config>(CONFIG).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_parse_literal() {
-        // Flat or complex syntax (they're equivalent)
-        assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
-        // This is the serialized format
-        assert_tokens(
-            &literal_sensitive("abc").0,
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("literal"),
-                Token::Str("value"),
-                Token::Str("abc"),
-                Token::Str("sensitive"),
-                Token::Bool(true),
-                Token::MapEnd,
-            ],
-        );
-
-        // Can't parse non-strings
-        // https://github.com/LucasPickering/env-select/issues/16
-        assert_de_tokens_error::<ValueSource>(
-            &[Token::I32(16)],
-            "invalid type: integer `16`, expected string or map",
-        );
-        assert_de_tokens_error::<ValueSource>(
-            &[Token::Bool(true)],
-            "invalid type: boolean `true`, expected string or map",
-        );
-    }
-
-    #[test]
-    fn test_parse_native_command() {
-        // Default native command
-        assert_de_tokens(
-            &native("echo", ["test"], false),
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("command"),
-                Token::Str("command"),
-                Token::Seq { len: Some(2) },
-                Token::Str("echo"),
-                Token::Str("test"),
-                Token::SeqEnd,
-                Token::MapEnd,
-            ],
-        );
-
-        // Sensitive native command
-        assert_tokens(
-            &native("echo", ["test"], true).0,
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("command"),
-                Token::Str("command"),
-                Token::Seq { len: Some(2) },
-                Token::Str("echo"),
-                Token::Str("test"),
-                Token::SeqEnd,
-                Token::Str("sensitive"),
-                Token::Bool(true),
-                Token::MapEnd,
-            ],
-        );
-
-        // Empty command - error
-        assert_de_tokens_error::<ValueSourceKind>(
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("command"),
-                Token::Str("command"),
-                Token::Seq { len: Some(0) },
-                Token::SeqEnd,
-                Token::MapEnd,
-            ],
-            "Command array must have at least one element",
-        );
-    }
-
-    #[test]
-    fn test_parse_shell_command() {
-        // Regular shell command
-        assert_de_tokens(
-            &shell("echo test", false),
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("shell"),
-                Token::Str("command"),
-                Token::Str("echo test"),
-                Token::MapEnd,
-            ],
-        );
-
-        // Sensitive shell command
-        assert_tokens(
-            &shell("echo test", true).0,
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("shell"),
-                Token::Str("command"),
-                Token::Str("echo test"),
-                Token::Str("sensitive"),
-                Token::Bool(true),
-                Token::MapEnd,
-            ],
-        );
-    }
-
-    #[test]
-    fn test_parse_kubernetes() {
-        assert_tokens(
-            &ValueSourceInner {
-                kind: ValueSourceKind::KubernetesCommand {
-                    command: NativeCommand {
-                        program: "printenv".to_owned(),
-                        arguments: vec!["DB_PASSWORD".to_owned()],
-                    },
-                    pod_selector: "app=api".to_owned(),
-                    namespace: Some("development".to_owned()),
-                    container: Some("main".to_owned()),
-                },
-                sensitive: true,
-            },
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("kubernetes"),
-                //
-                Token::Str("command"),
-                Token::Seq { len: Some(2) },
-                Token::Str("printenv"),
-                Token::Str("DB_PASSWORD"),
-                Token::SeqEnd,
-                //
-                Token::Str("pod_selector"),
-                Token::Str("app=api"),
-                //
-                Token::Str("namespace"),
-                Token::Some,
-                Token::Str("development"),
-                //
-                Token::Str("container"),
-                Token::Some,
-                Token::Str("main"),
-                //
-                Token::Str("sensitive"),
-                Token::Bool(true),
-                Token::MapEnd,
-            ],
-        );
-    }
-
-    #[test]
-    fn test_parse_unknown_type() {
-        assert_de_tokens_error::<ValueSource>(
-            &[
-                Token::Map { len: None },
-                Token::Str("type"),
-                Token::Str("unknown"),
-                Token::MapEnd,
-            ],
-            "unknown variant `unknown`, expected one of \
-            `literal`, `command`, `shell`, `kubernetes`",
-        )
-    }
-
-    #[test]
-    fn test_set_merge() {
-        let mut v1 = set([1]);
-        let v2 = set([2, 1]);
-        v1.merge(v2);
-        assert_eq!(v1, set([1, 2]));
-    }
-
-    #[test]
-    fn test_map_merge() {
-        let mut map1 = map([("a", set([1])), ("b", set([2]))]);
-        let map2 = map([("a", set([3])), ("c", set([4]))]);
-        map1.merge(map2);
-        assert_eq!(
-            map1,
-            map([("a", set([1, 3])), ("b", set([2])), ("c", set([4])),])
-        );
-    }
-
-    #[test]
-    fn test_config_merge() {
-        let mut config1 = Config {
-            applications: map([
-                (
-                    "app1",
-                    Application {
-                        profiles: map([
-                            (
-                                "prof1",
-                                Profile {
-                                    variables: map([
-                                        // Gets overwritten
-                                        ("VAR1", literal("val1")),
-                                        ("VAR2", literal("val2")),
-                                    ]),
-                                },
-                            ),
-                            // No conflict
-                            (
-                                "prof2",
-                                Profile {
-                                    variables: map([
-                                        ("VAR1", literal("val11")),
-                                        ("VAR2", literal("val22")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
-                ),
-                // No conflict
-                (
-                    "app2",
-                    Application {
-                        profiles: map([(
-                            "prof1",
-                            Profile {
-                                variables: map([("VAR1", literal("val1"))]),
-                            },
-                        )]),
-                    },
-                ),
-            ]),
-        };
-        let config2 = Config {
-            applications: map([
-                // Merged into existing
-                (
-                    "app1",
-                    Application {
-                        profiles: map([
-                            (
-                                "prof1",
-                                Profile {
-                                    variables: map([
-                                        // Overwrites
-                                        ("VAR1", literal("val7")),
-                                    ]),
-                                },
-                            ),
-                            // No conflict
-                            (
-                                "prof3",
-                                Profile {
-                                    variables: map([
-                                        ("VAR1", literal("val111")),
-                                        ("VAR2", literal("val222")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
-                ),
-                // No conflict
-                (
-                    "app3",
-                    Application {
-                        profiles: map([(
-                            "prof1",
-                            Profile {
-                                variables: map([("VAR1", literal("val11"))]),
-                            },
-                        )]),
-                    },
-                ),
-            ]),
-        };
-        config1.merge(config2);
-        assert_eq!(
-            config1,
-            Config {
-                applications: map([
-                    (
-                        "app1",
-                        Application {
-                            profiles: map([
-                                (
-                                    "prof1",
-                                    Profile {
-                                        variables: map([
-                                            ("VAR1", literal("val7")),
-                                            ("VAR2", literal("val2")),
-                                        ])
-                                    }
-                                ),
-                                (
-                                    "prof2",
-                                    Profile {
-                                        variables: map([
-                                            ("VAR1", literal("val11")),
-                                            ("VAR2", literal("val22"))
-                                        ])
-                                    }
-                                ),
-                                (
-                                    "prof3",
-                                    Profile {
-                                        variables: map([
-                                            ("VAR1", literal("val111")),
-                                            ("VAR2", literal("val222")),
-                                        ])
-                                    }
-                                ),
-                            ]),
-                        }
-                    ),
-                    (
-                        "app2",
-                        Application {
-                            profiles: map([(
-                                "prof1",
-                                Profile {
-                                    variables: map([("VAR1", literal("val1"))])
-                                },
-                            )]),
-                        }
-                    ),
-                    (
-                        "app3",
-                        Application {
-                            profiles: map([(
-                                "prof1",
-                                Profile {
-                                    variables: map([(
-                                        "VAR1",
-                                        literal("val11"),
-                                    )])
-                                },
-                            )]),
-                        }
-                    ),
-                ]),
-            }
-        );
+impl<K: Display + Eq + Hash + PartialEq, V> DisplayKeys for IndexMap<K, V> {
+    fn display_keys(&self) -> String {
+        self.keys()
+            .map(|key| key.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }

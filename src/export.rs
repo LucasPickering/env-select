@@ -1,5 +1,8 @@
 use crate::{
-    config::{Application, Config, Profile, ValueSource, ValueSourceKind},
+    config::{
+        Application, Config, DisplayKeys, Name, Profile, ValueSource,
+        ValueSourceKind,
+    },
     console,
     shell::Shell,
 };
@@ -27,8 +30,8 @@ impl Exporter {
     /// prompt.
     pub fn load_environment(
         &self,
-        application_name: &str,
-        profile_name: Option<&str>,
+        application_name: &Name,
+        profile_name: Option<&Name>,
     ) -> anyhow::Result<Environment> {
         // Check for the application
         match self.config.applications.get(application_name) {
@@ -49,10 +52,11 @@ impl Exporter {
     /// sick pro tip.
     pub fn print_export_commands(
         &self,
-        select_key: &str,
-        default: Option<&str>,
+        application_name: &Name,
+        profile_name: Option<&Name>,
     ) -> anyhow::Result<()> {
-        let environment = self.load_environment(select_key, default)?;
+        let environment =
+            self.load_environment(application_name, profile_name)?;
 
         self.shell.print_export(&environment);
 
@@ -73,7 +77,7 @@ impl Exporter {
     fn load_profile<'a>(
         &'a self,
         application: &'a Application,
-        default_profile_name: Option<&str>,
+        default_profile_name: Option<&Name>,
     ) -> anyhow::Result<&'a Profile> {
         match default_profile_name {
             // User passed a profile name as an arg - look for a profile
@@ -83,12 +87,7 @@ impl Exporter {
                     anyhow!(
                         "No profile with the name {}, options are: {}",
                         profile_name,
-                        application
-                            .profiles
-                            .keys()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
+                        application.profiles.display_keys()
                     )
                 })
             }

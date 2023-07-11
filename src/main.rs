@@ -5,7 +5,7 @@ mod export;
 mod shell;
 
 use crate::{
-    config::Config,
+    config::{Config, Name},
     error::ExitCodeError,
     export::Exporter,
     shell::{Shell, ShellKind},
@@ -84,11 +84,11 @@ enum Commands {
 struct SelectionArgs {
     /// The name of the application to select a profile for
     // TODO make this optional and allow selecting application interactively
-    application: String,
+    application: Name,
 
     /// Profile to select. If omitted, an interactive prompt will be shown to
     /// select between possible options.
-    profile: Option<String>,
+    profile: Option<Name>,
 }
 
 fn main() -> ExitCode {
@@ -180,7 +180,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
             };
             let exporter = Exporter::new(config, shell);
             let environment =
-                exporter.load_environment(select_key, profile.as_deref())?;
+                exporter.load_environment(select_key, profile.as_ref())?;
 
             info!("Executing {program:?} {arguments:?} with extra environment {environment}");
             let status = Command::new(program)
@@ -203,7 +203,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
                 },
         } => {
             let exporter = Exporter::new(config, shell);
-            exporter.print_export_commands(select_key, profile.as_deref())
+            exporter.print_export_commands(select_key, profile.as_ref())
         }
         Commands::Show => {
             println!("Shell: {}", shell.kind);

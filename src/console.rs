@@ -1,4 +1,4 @@
-use crate::config::{Application, Profile};
+use crate::config::{Application, Name, Profile};
 use anyhow::bail;
 use atty::Stream;
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -13,7 +13,7 @@ pub fn prompt_application(
     application: &Application,
 ) -> anyhow::Result<&Profile> {
     let theme = ColorfulTheme::default();
-    let profiles: Vec<(&String, &Profile)> =
+    let profiles: Vec<(&Name, &Profile)> =
         application.profiles.iter().collect();
 
     if profiles.is_empty() {
