@@ -42,7 +42,7 @@ pub struct Application {
 /// a singular value.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Profile {
-    #[serde(flatten)]
+    #[serde(default)]
     pub variables: IndexMap<String, ValueSource>,
 }
 
@@ -278,10 +278,12 @@ mod tests {
     };
 
     const CONFIG: &str = r#"
-[applications.server.profiles]
-dev = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
-prd = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
-[applications.server.profiles.secret]
+[applications.server.profiles.dev]
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+[applications.server.profiles.prd]
+variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+
+[applications.server.profiles.secret.variables]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
 SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
 SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
