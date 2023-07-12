@@ -25,8 +25,9 @@ impl Merge for Application {
 impl Merge for Profile {
     fn merge(&mut self, other: Self) {
         // Incoming entries take priority over ours
-        self.extends.extend(other.extends);
-        self.variables.extend(other.variables);
+        // TODO - should we really be merging profiles?
+        self.extends.merge(other.extends);
+        self.variables.extend(other.variables.into_iter());
     }
 }
 
