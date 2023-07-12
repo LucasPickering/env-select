@@ -1,6 +1,7 @@
 use super::*;
 use crate::config::{Application, Config, Profile, ValueSourceKind};
 use indexmap::{IndexMap, IndexSet};
+use pretty_assertions::assert_eq;
 use serde_test::{
     assert_de_tokens, assert_de_tokens_error, assert_tokens, Token,
 };
@@ -31,11 +32,15 @@ SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive
 [applications.empty]
 "#;
 
-// TODO add more comprehensive inheritance tests
-
 impl From<&str> for Name {
     fn from(value: &str) -> Self {
         Self(value.to_owned())
+    }
+}
+
+impl From<&str> for ProfileReference {
+    fn from(value: &str) -> Self {
+        value.parse().expect("Invalid profile reference")
     }
 }
 
@@ -46,17 +51,11 @@ fn map<'a, K: Eq + Hash + PartialEq + From<&'a str>, V, const N: usize>(
     items.into_iter().map(|(k, v)| (k.into(), v)).collect()
 }
 
-/// Helper for building an IndexMap
-fn set<V: Hash + Eq, const N: usize>(items: [V; N]) -> IndexSet<V> {
-    IndexSet::from(items)
-}
-
-/// Helper for building a ProfileReference
-fn profile(application: Option<&str>, profile: &str) -> ProfileReference {
-    ProfileReference {
-        application: application.map(Name::from),
-        profile: profile.into(),
-    }
+/// Helper for building an IndexSet
+fn set<'a, V: From<&'a str> + Hash + Eq, const N: usize>(
+    items: [&'a str; N],
+) -> IndexSet<V> {
+    items.into_iter().map(V::from).collect()
 }
 
 /// Helper to create a non-sensitive literal
@@ -130,14 +129,14 @@ fn test_parse_config() {
                         (
                             "base",
                             Profile {
-                                extends: set([profile(Some("base"), "base")]),
+                                extends: set(["base/base"]),
                                 variables: map([("USERNAME", literal("user"))]),
                             },
                         ),
                         (
                             "dev",
                             Profile {
-                                extends: set([profile(None, "base")]),
+                                extends: set(["base"]),
                                 variables: map([
                                     ("SERVICE1", literal("dev")),
                                     ("SERVICE2", literal("also-dev")),
@@ -147,7 +146,7 @@ fn test_parse_config() {
                         (
                             "prd",
                             Profile {
-                                extends: set([profile(None, "base")]),
+                                extends: set(["base"]),
                                 variables: map([
                                     ("SERVICE1", literal("prd")),
                                     ("SERVICE2", literal("also-prd")),
@@ -157,7 +156,7 @@ fn test_parse_config() {
                         (
                             "secret",
                             Profile {
-                                extends: set([profile(None, "base")]),
+                                extends: set(["base"]),
                                 variables: map([
                                     ("SERVICE1", literal_sensitive("secret")),
                                     (
@@ -439,26 +438,19 @@ fn test_parse_unknown_type() {
 }
 
 #[test]
-fn test_set_merge() {
-    let mut v1 = set([1]);
-    let v2 = set([2, 1]);
-    v1.merge(v2);
-    assert_eq!(v1, set([1, 2]));
-}
-
-#[test]
-fn test_map_merge() {
-    let mut map1: IndexMap<String, _> = map([("a", set([1])), ("b", set([2]))]);
-    let map2 = map([("a", set([3])), ("c", set([4]))]);
+fn test_merge_map() {
+    let mut map1: IndexMap<String, IndexSet<&str>> =
+        map([("a", set(["1"])), ("b", set(["2"]))]);
+    let map2 = map([("a", set(["3"])), ("c", set(["4"]))]);
     map1.merge(map2);
     assert_eq!(
         map1,
-        map([("a", set([1, 3])), ("b", set([2])), ("c", set([4])),])
+        map([("a", set(["1", "3"])), ("b", set(["2"])), ("c", set(["4"])),])
     );
 }
 
 #[test]
-fn test_config_merge() {
+fn test_merge_config() {
     let mut config1 = Config {
         applications: map([
             (
@@ -468,7 +460,7 @@ fn test_config_merge() {
                         (
                             "prof1",
                             Profile {
-                                extends: set([profile(None, "prof2")]),
+                                extends: set(["prof2"]),
                                 variables: map([
                                     // Gets overwritten
                                     ("VAR1", literal("val1")),
@@ -515,7 +507,7 @@ fn test_config_merge() {
                         (
                             "prof1",
                             Profile {
-                                extends: set([profile(None, "prof3")]),
+                                extends: set(["prof3"]),
                                 variables: map([
                                     // Overwrites
                                     ("VAR1", literal("val7")),
@@ -563,10 +555,7 @@ fn test_config_merge() {
                             (
                                 "prof1",
                                 Profile {
-                                    extends: set([
-                                        profile(None, "prof2"),
-                                        profile(None, "prof3")
-                                    ]),
+                                    extends: set(["prof2", "prof3"]),
                                     variables: map([
                                         ("VAR1", literal("val7")),
                                         ("VAR2", literal("val2")),
@@ -615,12 +604,599 @@ fn test_config_merge() {
                             "prof1",
                             Profile {
                                 extends: set([]),
-                                variables: map([("VAR1", literal("val11"),)])
+                                variables: map([("VAR1", literal("val11"))])
                             },
                         )]),
                     }
                 ),
             ]),
         }
+    );
+}
+
+#[test]
+fn test_inherit_single() {
+    let mut config = Config {
+        applications: map([(
+            "app",
+            Application {
+                profiles: map([
+                    (
+                        "base",
+                        Profile {
+                            extends: set([]),
+                            variables: map([
+                                ("VAR1", literal("base")),
+                                ("VAR2", literal("base")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "child",
+                        Profile {
+                            extends: set(["base"]),
+                            variables: map([
+                                ("VAR1", literal("child")),
+                                // VAR2 comes from base
+                                ("VAR3", literal("child")),
+                            ]),
+                        },
+                    ),
+                ]),
+            },
+        )]),
+    };
+    config
+        .resolve_inheritance()
+        .expect("Error resolving valid inheritance");
+    assert_eq!(
+        config,
+        Config {
+            applications: map([(
+                "app",
+                Application {
+                    profiles: map([
+                        (
+                            "base",
+                            Profile {
+                                extends: set([]),
+                                variables: map([
+                                    ("VAR1", literal("base")),
+                                    ("VAR2", literal("base")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "child",
+                            Profile {
+                                extends: set(["base"]),
+                                variables: map([
+                                    ("VAR1", literal("child")),
+                                    ("VAR3", literal("child")),
+                                    ("VAR2", literal("base")),
+                                ]),
+                            },
+                        ),
+                    ]),
+                },
+            ),]),
+        }
+    );
+}
+
+#[test]
+fn test_inherit_linear() {
+    let mut config = Config {
+        applications: map([
+            (
+                "app1",
+                Application {
+                    profiles: map([
+                        (
+                            "base",
+                            Profile {
+                                extends: set([]),
+                                variables: map([
+                                    ("VAR1", literal("base")),
+                                    ("VAR2", literal("base")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "child1",
+                            Profile {
+                                extends: set(["base"]),
+                                variables: map([
+                                    ("VAR1", literal("child1")),
+                                    // VAR2 comes from base
+                                    ("VAR3", literal("child1")),
+                                ]),
+                            },
+                        ),
+                    ]),
+                },
+            ),
+            (
+                "app2",
+                Application {
+                    profiles: map([(
+                        "child2",
+                        Profile {
+                            extends: set(["app1/child1"]),
+                            variables: map([
+                                ("VAR1", literal("child2")),
+                                // VAR2 comes from base
+                                // VAR3 comes from child1
+                                ("VAR4", literal("child2")),
+                            ]),
+                        },
+                    )]),
+                },
+            ),
+        ]),
+    };
+    config
+        .resolve_inheritance()
+        .expect("Error resolving valid inheritance");
+    assert_eq!(
+        config,
+        Config {
+            applications: map([
+                (
+                    "app1",
+                    Application {
+                        profiles: map([
+                            (
+                                "base",
+                                Profile {
+                                    extends: set([]),
+                                    variables: map([
+                                        ("VAR1", literal("base")),
+                                        ("VAR2", literal("base")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "child1",
+                                Profile {
+                                    extends: set(["base"]),
+                                    variables: map([
+                                        ("VAR1", literal("child1")),
+                                        ("VAR3", literal("child1")),
+                                        ("VAR2", literal("base")),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "app2",
+                    Application {
+                        profiles: map([(
+                            "child2",
+                            Profile {
+                                extends: set(["app1/child1"]),
+                                variables: map([
+                                    ("VAR1", literal("child2")),
+                                    ("VAR4", literal("child2")),
+                                    ("VAR3", literal("child1")),
+                                    ("VAR2", literal("base")),
+                                ]),
+                            },
+                        )]),
+                    },
+                ),
+            ]),
+        }
+    );
+}
+
+#[test]
+fn test_inherit_nonlinear() {
+    let mut config = Config {
+        applications: map([
+            (
+                "app1",
+                Application {
+                    profiles: map([
+                        (
+                            "base1",
+                            Profile {
+                                extends: set([]),
+                                variables: map([
+                                    ("BASE_VAR1", literal("base1")),
+                                    ("BASE_VAR2", literal("base1")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof2",
+                            Profile {
+                                extends: set(["base1"]),
+                                variables: map([
+                                    ("BASE_VAR2", literal("prof2")),
+                                    ("CHILD_VAR1", literal("prof2")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "base2",
+                            Profile {
+                                extends: set([]),
+                                variables: map([
+                                    ("BASE_VAR3", literal("base2")),
+                                    ("BASE_VAR4", literal("base2")),
+                                ]),
+                            },
+                        ),
+                    ]),
+                },
+            ),
+            (
+                "app2",
+                Application {
+                    profiles: map([
+                        (
+                            "prof1",
+                            Profile {
+                                extends: set(["app1/base1"]),
+                                variables: map([(
+                                    "BASE_VAR2",
+                                    literal("prof1"),
+                                )]),
+                            },
+                        ),
+                        (
+                            "prof3",
+                            Profile {
+                                extends: set(["app2/prof1", "app1/prof2"]),
+                                variables: map([
+                                    ("CHILD_VAR2", literal("prof3")),
+                                    ("CHILD_VAR3", literal("prof3")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof4",
+                            Profile {
+                                extends: set(["prof1"]),
+                                variables: map([
+                                    ("CHILD_VAR4", literal("prof4")),
+                                    ("BASE_VAR4", literal("prof4")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof5",
+                            Profile {
+                                extends: set(["prof4", "prof3", "app1/base2"]),
+                                variables: map([(
+                                    "CHILD_VAR5",
+                                    literal("prof5"),
+                                )]),
+                            },
+                        ),
+                    ]),
+                },
+            ),
+            (
+                "app3",
+                Application {
+                    profiles: map([
+                        (
+                            "solo",
+                            Profile {
+                                extends: set([]),
+                                variables: map([(
+                                    "SOLO_VAR1",
+                                    literal("solo1"),
+                                )]),
+                            },
+                        ),
+                        (
+                            "striker1",
+                            Profile {
+                                extends: set([]),
+                                variables: map([
+                                    ("CHILD_VAR1", literal("striker1")),
+                                    ("CHILD_VAR2", literal("striker1")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "striker2",
+                            Profile {
+                                extends: set(["striker1"]),
+                                variables: map([
+                                    ("CHILD_VAR1", literal("striker2")),
+                                    ("CHILD_VAR3", literal("striker2")),
+                                ]),
+                            },
+                        ),
+                    ]),
+                },
+            ),
+        ]),
+    };
+    config
+        .resolve_inheritance()
+        .expect("Error resolving valid inheritance");
+    assert_eq!(
+        config,
+        Config {
+            applications: map([
+                (
+                    "app1",
+                    Application {
+                        profiles: map([
+                            (
+                                "base1",
+                                Profile {
+                                    extends: set([]),
+                                    variables: map([
+                                        ("BASE_VAR1", literal("base1")),
+                                        ("BASE_VAR2", literal("base1")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "prof2",
+                                Profile {
+                                    extends: set(["base1"]),
+                                    variables: map([
+                                        ("BASE_VAR2", literal("prof2")),
+                                        ("CHILD_VAR1", literal("prof2")),
+                                        // base1
+                                        ("BASE_VAR1", literal("base1")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "base2",
+                                Profile {
+                                    extends: set([]),
+                                    variables: map([
+                                        ("BASE_VAR3", literal("base2")),
+                                        ("BASE_VAR4", literal("base2")),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "app2",
+                    Application {
+                        profiles: map([
+                            (
+                                "prof1",
+                                Profile {
+                                    extends: set(["app1/base1"]),
+                                    variables: map([
+                                        ("BASE_VAR2", literal("prof1")),
+                                        ("BASE_VAR1", literal("base1")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "prof3",
+                                Profile {
+                                    extends: set(["app2/prof1", "app1/prof2"]),
+                                    variables: map([
+                                        ("CHILD_VAR2", literal("prof3")),
+                                        ("CHILD_VAR3", literal("prof3")),
+                                        // prof1
+                                        ("BASE_VAR1", literal("base1")),
+                                        ("BASE_VAR2", literal("prof1")),
+                                        // prof2
+                                        ("CHILD_VAR1", literal("prof2")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "prof4",
+                                Profile {
+                                    extends: set(["prof1"]),
+                                    variables: map([
+                                        ("CHILD_VAR4", literal("prof4")),
+                                        ("BASE_VAR4", literal("prof4")),
+                                        // prof1
+                                        ("BASE_VAR2", literal("prof1")),
+                                        ("BASE_VAR1", literal("base1")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "prof5",
+                                Profile {
+                                    extends: set([
+                                        "prof4",
+                                        "prof3",
+                                        "app1/base2",
+                                    ]),
+                                    variables: map([
+                                        ("CHILD_VAR5", literal("prof5"),),
+                                        // prof4
+                                        ("CHILD_VAR4", literal("prof4")),
+                                        ("BASE_VAR4", literal("prof4")),
+                                        ("BASE_VAR2", literal("prof1")),
+                                        ("BASE_VAR1", literal("base1")),
+                                        // prof3
+                                        ("CHILD_VAR2", literal("prof3")),
+                                        ("CHILD_VAR3", literal("prof3")),
+                                        ("CHILD_VAR1", literal("prof2")),
+                                        // base2
+                                        ("BASE_VAR3", literal("base2")),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "app3",
+                    Application {
+                        profiles: map([
+                            (
+                                "solo",
+                                Profile {
+                                    extends: set([]),
+                                    variables: map([(
+                                        "SOLO_VAR1",
+                                        literal("solo1"),
+                                    )]),
+                                },
+                            ),
+                            (
+                                "striker1",
+                                Profile {
+                                    extends: set([]),
+                                    variables: map([
+                                        ("CHILD_VAR1", literal("striker1")),
+                                        ("CHILD_VAR2", literal("striker1")),
+                                    ]),
+                                },
+                            ),
+                            (
+                                "striker2",
+                                Profile {
+                                    extends: set(["striker1"]),
+                                    variables: map([
+                                        ("CHILD_VAR1", literal("striker2")),
+                                        ("CHILD_VAR3", literal("striker2")),
+                                        // striker1
+                                        ("CHILD_VAR2", literal("striker1")),
+                                    ]),
+                                },
+                            ),
+                        ]),
+                    },
+                ),
+            ]),
+        }
+    );
+}
+
+#[test]
+fn test_inherit_cycle() {
+    // One-node cycle
+    let mut config = Config {
+        applications: map([(
+            "app1",
+            Application {
+                profiles: map([(
+                    "child1",
+                    Profile {
+                        extends: set(["child1"]),
+                        variables: map([]),
+                    },
+                )]),
+            },
+        )]),
+    };
+    assert_eq!(
+        config
+            .resolve_inheritance()
+            .expect_err("Expected error for inheritance cycle")
+            .to_string(),
+        "Inheritance cycle detected: app1/child1 -> app1/child1"
+    );
+
+    // Two-node cycle
+    let mut config = Config {
+        applications: map([(
+            "app1",
+            Application {
+                profiles: map([
+                    (
+                        "child1",
+                        Profile {
+                            extends: set(["child2"]),
+                            variables: map([]),
+                        },
+                    ),
+                    (
+                        "child2",
+                        Profile {
+                            extends: set(["child1"]),
+                            variables: map([]),
+                        },
+                    ),
+                ]),
+            },
+        )]),
+    };
+    assert_eq!(
+        config
+            .resolve_inheritance()
+            .expect_err("Expected error for inheritance cycle")
+            .to_string(),
+        "Inheritance cycle detected: app1/child2 -> app1/child1 -> app1/child2"
+    );
+
+    // 3-node cycle
+    let mut config = Config {
+        applications: map([(
+            "app1",
+            Application {
+                profiles: map([
+                    (
+                        "child1",
+                        Profile {
+                            extends: set(["child3"]),
+                            variables: map([]),
+                        },
+                    ),
+                    (
+                        "child2",
+                        Profile {
+                            extends: set(["child1"]),
+                            variables: map([]),
+                        },
+                    ),
+                    (
+                        "child3",
+                        Profile {
+                            extends: set(["child2"]),
+                            variables: map([]),
+                        },
+                    ),
+                ]),
+            },
+        )]),
+    };
+    assert_eq!(
+        config
+            .resolve_inheritance()
+            .expect_err("Expected error for inheritance cycle")
+            .to_string(),
+        "Inheritance cycle detected: app1/child3 -> app1/child2 -> app1/child1 -> app1/child3"
+    );
+}
+
+#[test]
+fn test_inherit_unknown() {
+    let mut config = Config {
+        applications: map([(
+            "app1",
+            Application {
+                profiles: map([(
+                    "child1",
+                    Profile {
+                        extends: set(["base"]),
+                        variables: map([]),
+                    },
+                )]),
+            },
+        )]),
+    };
+
+    assert_eq!(
+        config
+            .resolve_inheritance()
+            .expect_err("Expected error for unknown path")
+            .to_string(),
+        "Unknown profile: app1/base"
     );
 }

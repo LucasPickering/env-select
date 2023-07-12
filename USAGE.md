@@ -250,6 +250,75 @@ variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 
 To see where env-select is loading configs from, and how they are being merged together, run the command with the `--verbose` (or `-v`) flag.
 
+## Profile Inheritance
+
+In addition to top-level merging of multiple config files, env-select also supports inheritance between profiles, via the `extends` field on a profile. For example:
+
+```toml
+[applications.server.profiles.base]
+variables = {PROTOCOL = "https"}
+[applications.server.profiles.dev]
+extends = ["base"]
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+[applications.server.profiles.prd]
+extends = ["base"]
+variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+```
+
+During execution, env-select will merge each profile with its parent(s):
+
+```sh
+> es set server
+❯ === base ===
+PROTOCOL=https
+
+  === dev ===
+SERVICE1=dev
+SERVICE2=also-dev
+PROTOCOL=https
+
+  === prd ===
+SERVICE1=prd
+SERVICE2=also-prd
+PROTOCOL=https
+```
+
+Note the `PROTOCOL` variable is available in `dev` and `prd`. The profile name given in `extends` is assumed to be a profile of the same application. To extend a profile from another application, use the format `application/profile`:
+
+```toml
+[applications.common.profiles.base]
+variables = {PROTOCOL = "https"}
+[applications.server.profiles.dev]
+extends = ["common/base"]
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+[applications.server.profiles.prd]
+extends = ["common/base"]
+variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+```
+
+#### Multiple Inheritance and Precedence
+
+Each profile can extend multiple parents. If two parents have conflicting values, the **left-most** parent has precedence:
+
+```toml
+[applications.server.profiles.base1]
+variables = {PROTOCOL = "https"}
+[applications.server.profiles.base2]
+variables = {PROTOCOL = "http"}
+[applications.server.profiles.dev]
+extends = ["base1", "base2"]
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+```
+
+The value from `base1` is used:
+
+```sh
+> es run server dev -- printenv PROTOCOL
+https
+```
+
+Inheritance is applied recursively, meaning you can have arbitrarily large inheritance trees, **as long as there are no cycles**.
+
 ## Configuration Reference
 
 ### Value Source
