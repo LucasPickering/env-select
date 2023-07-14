@@ -6,7 +6,7 @@ use crate::{
     console,
     shell::Shell,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use atty::Stream;
 use indexmap::IndexMap;
 use std::fmt::{Display, Formatter};
@@ -121,12 +121,12 @@ impl Environment {
         Ok(environment)
     }
 
-    /// Get an iterator over unmasked `(variable, value)` pairs, that can be
+    /// Get an iterator over unmasked `(variable, value)` pairs that can be
     /// exported to the shell
-    pub fn iter_unmasked(&self) -> impl Iterator<Item = (&String, &String)> {
+    pub fn iter_unmasked(&self) -> impl Iterator<Item = (&str, &str)> {
         self.0
             .iter()
-            .map(|(variable, value)| (variable, &value.value))
+            .map(|(variable, value)| (variable.as_str(), value.value.as_str()))
     }
 
     /// Get a string for a Value. This may involve external communication, e.g.
@@ -135,9 +135,9 @@ impl Environment {
         &mut self,
         shell: &Shell,
         variable: String,
-        value_source: ValueSource,
+        ValueSource(value_source): ValueSource,
     ) -> anyhow::Result<()> {
-        let value = match value_source.0.kind {
+        let raw_value = match value_source.kind {
             // Plain value
             ValueSourceKind::Literal { value } => value,
             // Run a program+args locally
@@ -161,13 +161,39 @@ impl Environment {
                 shell.execute_shell(&command)?
             }
         };
-        self.0.insert(
-            variable,
-            ResolvedValue {
-                value,
-                sensitive: value_source.0.sensitive,
-            },
-        );
+
+        if value_source.multiple {
+            // If we're expecting a multi-value mapping, parse that now. We'll
+            // throw away the variable name from the config and use the ones in
+            // the mapping
+            let mapping = dotenv_parser::parse_dotenv(&raw_value)
+                .map_err(|error| anyhow!(error))
+                .with_context(|| {
+                    format!(
+                        "Error parsing multi-variable mapping for field {}",
+                        variable
+                    )
+                })?;
+
+            for (variable, value) in mapping {
+                self.0.insert(
+                    variable,
+                    ResolvedValue {
+                        value,
+                        sensitive: value_source.sensitive,
+                    },
+                );
+            }
+        } else {
+            self.0.insert(
+                variable,
+                ResolvedValue {
+                    value: raw_value,
+                    sensitive: value_source.sensitive,
+                },
+            );
+        }
+
         Ok(())
     }
 }
