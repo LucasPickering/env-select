@@ -150,6 +150,33 @@ DB_USER = "root"
 DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = true}
 ```
 
+### Multiple Values from a Single Source
+
+If you want to load multiple values from a single source, you can use the `multiple = true` flag. This will tell env-select to expect a mapping of `VARIABLE=value` as output from the value source, with one entry per line. Whitespace lines and anything preceded by a `#` will be ignored (this isthe standard `.env` file format).
+
+This means that **the key associated with this entry in the `variables` map will be ignored**.
+
+```toml
+[applications.db.profiles.dev.variables]
+DATABASE = "dev"
+creds = {type = "command", command = ["cat", "creds.env"], multiple = true}
+```
+
+```sh
+# creds.env
+DB_USER=root
+DB_PASSWORD=hunter2
+```
+
+```sh
+es run db dev -- printenv
+DATABASE=dev
+DB_USER=root
+DB_PASSWORD=hunter2
+```
+
+Notice the `creds` key never appears in the environment; this is just a placeholder. You can use any key you want here.
+
 ### Load Values from Kubernetes
 
 Ever had a secret in a Kubernetes pod that you want to fetch easily? The `kubernetes` value source lets you run any command in a kubernetes pod.
@@ -170,6 +197,20 @@ DB_PASSWORD = {type = "kubernetes", namespace = "production", pod_selector = "ap
 
 ```
 command = ["sh", "-c", "env | grep DB_PASSWORD | sed -E 's/.+=(.+)/\1/'"]
+```
+
+You can combine this with the `multiple = true` flag to fetch multiple values at once:
+
+```toml
+[applications.db.profiles.dev.variables]
+DATABASE = "dev"
+# The `creds` key is *not* significant here - you can name it anything you want
+[applications.db.profiles.dev.variables.creds]
+type = "kubernetes"
+namespace = "development"
+pod_selector = "app=api"
+command = ["sh", "-c", "printenv | grep -E '^(DB_USER|DB_PASSWORD)='"]
+multiple = true
 ```
 
 ## Configuration
@@ -356,9 +397,10 @@ GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
 
 All value sources support the following common fields:
 
-| Option      | Type      | Default | Description                  |
-| ----------- | --------- | ------- | ---------------------------- |
-| `sensitive` | `boolean` | `false` | Hide value in console output |
+| Option      | Type      | Default | Description                                                                                                   |
+| ----------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `multiple`  | `boolean` | `false` | Load a `VARIABLE=value` mapping, instead of just a `value`; [see more](#multiple-values-from-a-single-source) |
+| `sensitive` | `boolean` | `false` | Hide value in console output                                                                                  |
 
 #### Type-Specific Fields
 

@@ -20,7 +20,10 @@ extends = ["base"]
 variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 [applications.server.profiles.prd]
 extends = ["base"]
-variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+[applications.server.profiles.prd.variables]
+SERVICE1 = "prd"
+SERVICE2 = "also-prd"
+multiple = {type = "literal", value = "MULTI1=multi1\nMULTI2=multi2", multiple = true}
 
 [applications.server.profiles.secret]
 extends = ["base"]
@@ -49,13 +52,20 @@ impl From<ValueSourceKind> for ValueSource {
         Self(ValueSourceInner {
             kind,
             sensitive: false,
+            multiple: false,
         })
     }
 }
 
+// Builder-like functions to make it easy to create value sources
 impl ValueSource {
     fn sensitive(mut self, sensitive: bool) -> Self {
         self.0.sensitive = sensitive;
+        self
+    }
+
+    fn multiple(mut self, multiple: bool) -> Self {
+        self.0.multiple = multiple;
         self
     }
 }
@@ -146,6 +156,11 @@ fn test_parse_config() {
                                 variables: map([
                                     ("SERVICE1", literal("prd")),
                                     ("SERVICE2", literal("also-prd")),
+                                    (
+                                        "multiple",
+                                        literal("MULTI1=multi1\nMULTI2=multi2")
+                                            .multiple(true),
+                                    ),
                                 ]),
                             },
                         ),
@@ -264,22 +279,44 @@ fn test_parse_profile_reference() {
     );
 }
 
+/// Test generic fields on ValueSource
 #[test]
-fn test_parse_literal() {
-    // Flat or complex syntax (they're equivalent)
-    assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
-    // This is the serialized format
+fn test_parse_value_source() {
     assert_tokens(
-        &literal("abc").sensitive(true).0,
+        &literal("abc").multiple(true).sensitive(true).0,
         &[
             Token::Map { len: None },
             Token::Str("type"),
             Token::Str("literal"),
             Token::Str("value"),
             Token::Str("abc"),
+            Token::Str("multiple"),
+            Token::Bool(true),
             Token::Str("sensitive"),
             Token::Bool(true),
             Token::MapEnd,
+        ],
+    );
+}
+
+#[test]
+fn test_parse_literal() {
+    // Flat syntax
+    assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
+
+    // Map syntax
+    assert_tokens(
+        &literal("abc").0.kind,
+        &[
+            Token::Struct {
+                name: "ValueSourceKind",
+                len: 2,
+            },
+            Token::Str("type"),
+            Token::Str("literal"),
+            Token::Str("value"),
+            Token::Str("abc"),
+            Token::StructEnd,
         ],
     );
 
@@ -297,27 +334,13 @@ fn test_parse_literal() {
 
 #[test]
 fn test_parse_native_command() {
-    // Default native command
-    assert_de_tokens(
-        &native("echo", ["test"]),
-        &[
-            Token::Map { len: None },
-            Token::Str("type"),
-            Token::Str("command"),
-            Token::Str("command"),
-            Token::Seq { len: Some(2) },
-            Token::Str("echo"),
-            Token::Str("test"),
-            Token::SeqEnd,
-            Token::MapEnd,
-        ],
-    );
-
-    // Sensitive native command
     assert_tokens(
-        &native("echo", ["test"]).sensitive(true).0,
+        &native("echo", ["test"]).0.kind,
         &[
-            Token::Map { len: None },
+            Token::Struct {
+                name: "ValueSourceKind",
+                len: 2,
+            },
             Token::Str("type"),
             Token::Str("command"),
             Token::Str("command"),
@@ -325,9 +348,7 @@ fn test_parse_native_command() {
             Token::Str("echo"),
             Token::Str("test"),
             Token::SeqEnd,
-            Token::Str("sensitive"),
-            Token::Bool(true),
-            Token::MapEnd,
+            Token::StructEnd,
         ],
     );
 
@@ -348,31 +369,18 @@ fn test_parse_native_command() {
 
 #[test]
 fn test_parse_shell_command() {
-    // Regular shell command
-    assert_de_tokens(
-        &shell("echo test"),
-        &[
-            Token::Map { len: None },
-            Token::Str("type"),
-            Token::Str("shell"),
-            Token::Str("command"),
-            Token::Str("echo test"),
-            Token::MapEnd,
-        ],
-    );
-
-    // Sensitive shell command
     assert_tokens(
-        &shell("echo test").sensitive(true).0,
+        &shell("echo test").0.kind,
         &[
-            Token::Map { len: None },
+            Token::Struct {
+                name: "ValueSourceKind",
+                len: 2,
+            },
             Token::Str("type"),
             Token::Str("shell"),
             Token::Str("command"),
             Token::Str("echo test"),
-            Token::Str("sensitive"),
-            Token::Bool(true),
-            Token::MapEnd,
+            Token::StructEnd,
         ],
     );
 }
@@ -380,7 +388,7 @@ fn test_parse_shell_command() {
 #[test]
 fn test_parse_kubernetes() {
     assert_tokens(
-        &ValueSource::from(ValueSourceKind::KubernetesCommand {
+        &ValueSourceKind::KubernetesCommand {
             command: NativeCommand {
                 program: "printenv".to_owned(),
                 arguments: vec!["DB_PASSWORD".to_owned()],
@@ -388,11 +396,12 @@ fn test_parse_kubernetes() {
             pod_selector: "app=api".to_owned(),
             namespace: Some("development".to_owned()),
             container: Some("main".to_owned()),
-        })
-        .sensitive(true)
-        .0,
+        },
         &[
-            Token::Map { len: None },
+            Token::Struct {
+                name: "ValueSourceKind",
+                len: 5,
+            },
             Token::Str("type"),
             Token::Str("kubernetes"),
             //
@@ -412,10 +421,7 @@ fn test_parse_kubernetes() {
             Token::Str("container"),
             Token::Some,
             Token::Str("main"),
-            //
-            Token::Str("sensitive"),
-            Token::Bool(true),
-            Token::MapEnd,
+            Token::StructEnd,
         ],
     );
 }

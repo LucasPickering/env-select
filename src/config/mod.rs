@@ -90,6 +90,13 @@ pub struct ValueSource(pub ValueSourceInner);
 pub struct ValueSourceInner {
     #[serde(flatten)]
     pub kind: ValueSourceKind,
+
+    /// Source provides a mapping of line-delimited VARIABLE=value settings,
+    /// instead of a single vlaue
+    #[serde(default)]
+    pub multiple: bool,
+
+    /// Value(s) should be masked in display output
     #[serde(default)]
     pub sensitive: bool,
 }
@@ -301,6 +308,7 @@ impl ValueSource {
             kind: ValueSourceKind::Literal {
                 value: value.to_owned(),
             },
+            multiple: false,
             sensitive: false,
         })
     }
