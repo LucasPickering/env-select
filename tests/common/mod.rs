@@ -1,12 +1,14 @@
 use assert_cmd::Command;
 use rstest::fixture;
 use rstest_reuse::{self, *};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Command to run env-select
 #[fixture]
 pub fn env_select() -> Command {
-    Command::cargo_bin("env-select").unwrap()
+    let mut command = Command::cargo_bin("env-select").unwrap();
+    command.current_dir(tests_dir());
+    command
 }
 
 /// Fixture to run test with all shells
@@ -56,6 +58,14 @@ pub fn execute_script(
 
     let shell = shell_path(shell_kind);
     let mut command = Command::new(&shell);
-    command.env("SHELL", &shell).args(["-c", &script]);
     command
+        // Run from the tests/ directory, so we can use a dedicated config
+        .current_dir(tests_dir())
+        .env("SHELL", &shell)
+        .args(["-c", &script]);
+    command
+}
+
+fn tests_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/")
 }
