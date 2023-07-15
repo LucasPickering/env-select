@@ -44,6 +44,22 @@ impl From<&str> for ProfileReference {
     }
 }
 
+impl From<ValueSourceKind> for ValueSource {
+    fn from(kind: ValueSourceKind) -> Self {
+        Self(ValueSourceInner {
+            kind,
+            sensitive: false,
+        })
+    }
+}
+
+impl ValueSource {
+    fn sensitive(mut self, sensitive: bool) -> Self {
+        self.0.sensitive = sensitive;
+        self
+    }
+}
+
 /// Helper for building an IndexMap
 fn map<'a, K: Eq + Hash + PartialEq + From<&'a str>, V, const N: usize>(
     items: [(&'a str, V); N],
@@ -60,49 +76,29 @@ fn set<'a, V: From<&'a str> + Hash + Eq, const N: usize>(
 
 /// Helper to create a non-sensitive literal
 fn literal(value: &str) -> ValueSource {
-    ValueSource(ValueSourceInner {
-        kind: ValueSourceKind::Literal {
-            value: value.to_owned(),
-        },
-        sensitive: false,
-    })
-}
-
-/// Helper to create a sensitive literal
-fn literal_sensitive(value: &str) -> ValueSource {
-    ValueSource(ValueSourceInner {
-        kind: ValueSourceKind::Literal {
-            value: value.to_owned(),
-        },
-        sensitive: true,
-    })
+    ValueSourceKind::Literal {
+        value: value.to_owned(),
+    }
+    .into()
 }
 
 /// Helper to create a native command
-fn native<const N: usize>(
-    program: &str,
-    arguments: [&str; N],
-    sensitive: bool,
-) -> ValueSource {
-    ValueSource(ValueSourceInner {
-        kind: ValueSourceKind::NativeCommand {
-            command: NativeCommand {
-                program: program.into(),
-                arguments: arguments.into_iter().map(String::from).collect(),
-            },
+fn native<const N: usize>(program: &str, arguments: [&str; N]) -> ValueSource {
+    ValueSourceKind::NativeCommand {
+        command: NativeCommand {
+            program: program.into(),
+            arguments: arguments.into_iter().map(String::from).collect(),
         },
-        sensitive,
-    })
+    }
+    .into()
 }
 
 /// Helper to create a shell command
-fn shell(command: &str, sensitive: bool) -> ValueSource {
-    ValueSource(ValueSourceInner {
-        kind: ValueSourceKind::ShellCommand {
-            command: command.to_owned(),
-        },
-        sensitive,
-    })
+fn shell(command: &str) -> ValueSource {
+    ValueSourceKind::ShellCommand {
+        command: command.to_owned(),
+    }
+    .into()
 }
 
 /// General catch-all test
@@ -158,17 +154,19 @@ fn test_parse_config() {
                             Profile {
                                 extends: set(["base"]),
                                 variables: map([
-                                    ("SERVICE1", literal_sensitive("secret")),
+                                    (
+                                        "SERVICE1",
+                                        literal("secret").sensitive(true),
+                                    ),
                                     (
                                         "SERVICE2",
-                                        native("echo", ["also-secret"], true),
+                                        native("echo", ["also-secret"])
+                                            .sensitive(true),
                                     ),
                                     (
                                         "SERVICE3",
-                                        shell(
-                                            "echo secret_password | base64",
-                                            true,
-                                        ),
+                                        shell("echo secret_password | base64")
+                                            .sensitive(true),
                                     ),
                                 ]),
                             },
@@ -272,7 +270,7 @@ fn test_parse_literal() {
     assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
     // This is the serialized format
     assert_tokens(
-        &literal_sensitive("abc").0,
+        &literal("abc").sensitive(true).0,
         &[
             Token::Map { len: None },
             Token::Str("type"),
@@ -301,7 +299,7 @@ fn test_parse_literal() {
 fn test_parse_native_command() {
     // Default native command
     assert_de_tokens(
-        &native("echo", ["test"], false),
+        &native("echo", ["test"]),
         &[
             Token::Map { len: None },
             Token::Str("type"),
@@ -317,7 +315,7 @@ fn test_parse_native_command() {
 
     // Sensitive native command
     assert_tokens(
-        &native("echo", ["test"], true).0,
+        &native("echo", ["test"]).sensitive(true).0,
         &[
             Token::Map { len: None },
             Token::Str("type"),
@@ -352,7 +350,7 @@ fn test_parse_native_command() {
 fn test_parse_shell_command() {
     // Regular shell command
     assert_de_tokens(
-        &shell("echo test", false),
+        &shell("echo test"),
         &[
             Token::Map { len: None },
             Token::Str("type"),
@@ -365,7 +363,7 @@ fn test_parse_shell_command() {
 
     // Sensitive shell command
     assert_tokens(
-        &shell("echo test", true).0,
+        &shell("echo test").sensitive(true).0,
         &[
             Token::Map { len: None },
             Token::Str("type"),
@@ -382,18 +380,17 @@ fn test_parse_shell_command() {
 #[test]
 fn test_parse_kubernetes() {
     assert_tokens(
-        &ValueSourceInner {
-            kind: ValueSourceKind::KubernetesCommand {
-                command: NativeCommand {
-                    program: "printenv".to_owned(),
-                    arguments: vec!["DB_PASSWORD".to_owned()],
-                },
-                pod_selector: "app=api".to_owned(),
-                namespace: Some("development".to_owned()),
-                container: Some("main".to_owned()),
+        &ValueSource::from(ValueSourceKind::KubernetesCommand {
+            command: NativeCommand {
+                program: "printenv".to_owned(),
+                arguments: vec!["DB_PASSWORD".to_owned()],
             },
-            sensitive: true,
-        },
+            pod_selector: "app=api".to_owned(),
+            namespace: Some("development".to_owned()),
+            container: Some("main".to_owned()),
+        })
+        .sensitive(true)
+        .0,
         &[
             Token::Map { len: None },
             Token::Str("type"),
