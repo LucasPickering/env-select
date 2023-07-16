@@ -9,7 +9,10 @@ use crate::{
 use anyhow::{anyhow, Context};
 use atty::Stream;
 use indexmap::IndexMap;
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    fs,
+};
 
 /// Container to handle user selection and command generation. This is the core
 /// logic for the program.
@@ -48,7 +51,7 @@ impl Exporter {
         }
     }
 
-    /// Print the export command, and if apppropriate, tell the user about a
+    /// Print the export command, and if appropriate, tell the user about a
     /// sick pro tip.
     pub fn print_export_commands(
         &self,
@@ -138,12 +141,20 @@ impl Environment {
         ValueSource(value_source): ValueSource,
     ) -> anyhow::Result<()> {
         let raw_value = match value_source.kind {
-            // Plain value
             ValueSourceKind::Literal { value } => value,
+            ValueSourceKind::File { path } => fs::read_to_string(&path)
+                .with_context(|| format!("Error loading file {path:?}"))?,
+
             // Run a program+args locally
             ValueSourceKind::NativeCommand { command } => {
                 Shell::execute_native(command)?
             }
+
+            // Run a command locally via the shell
+            ValueSourceKind::ShellCommand { command } => {
+                shell.execute_shell(&command)?
+            }
+
             // Run a program+args in a kubernetes pod/container
             ValueSourceKind::KubernetesCommand {
                 command,
@@ -156,10 +167,6 @@ impl Environment {
                 namespace.as_deref(),
                 container.as_deref(),
             )?,
-            // Run a command locally via the shell
-            ValueSourceKind::ShellCommand { command } => {
-                shell.execute_shell(&command)?
-            }
         };
 
         if value_source.multiple {
@@ -216,4 +223,9 @@ impl Display for ResolvedValue {
             write!(f, "{}", self.value)
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // TODO
 }

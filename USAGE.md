@@ -136,7 +136,7 @@ You can define variables whose values are provided dynamically, by specifying a 
 [applications.db.profiles.dev.variables]
 DATABASE = "dev"
 DB_USER = "root"
-DB_PASSWORD = {type = "command", command = ["cat", "password.txt"], sensitive = true}
+DB_PASSWORD = {type = "command", command = ["curl", "https://www.random.org/strings/?format=plain&len=10&num=1&loweralpha=on"], sensitive = true}
 ```
 
 When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
@@ -159,23 +159,64 @@ This means that **the key associated with this entry in the `variables` map will
 ```toml
 [applications.db.profiles.dev.variables]
 DATABASE = "dev"
-creds = {type = "command", command = ["cat", "creds.env"], multiple = true}
+creds = {type = "file", path = "creds.env", multiple = true}
 ```
 
+`creds.env`:
+
 ```sh
-# creds.env
 DB_USER=root
 DB_PASSWORD=hunter2
 ```
 
+`creds` will now be expanded into multiple variables:
+
 ```sh
-es run db dev -- printenv
+> es run db dev -- printenv
 DATABASE=dev
 DB_USER=root
 DB_PASSWORD=hunter2
 ```
 
 Notice the `creds` key never appears in the environment; this is just a placeholder. You can use any key you want here.
+
+### Load Values from a File
+
+You can load one values from a file.
+
+```toml
+[applications.db.profiles.dev.variables]
+DATABASE = {type = "file", path = "database.txt"}
+```
+
+`database.txt`:
+
+```
+dev
+```
+
+```sh
+> es run db dev -- printenv
+DATABASE=dev
+```
+
+The file path will be relative to **the config file in which the path is defined**. For example, if you have two `.env-select.toml` files:
+
+```toml
+# ~/code/.env-select.toml
+[applications.server.profiles.dev.variables]
+SERVICE1 = {type = "file", path = "service1.txt"}
+```
+
+```toml
+# ~/.env-select.toml
+[applications.server.profiles.dev.variables]
+SERVICE2 = {type = "file", path = "service2.txt"}
+```
+
+In this scenario, `SERVICE1` will be loaded from `~/code/service1.txt` while `SERVICE2` will be loaded from `~/service2.txt`, **regardless of where env-select is invoked from**.
+
+This value source combines well with the `multiple` field to load `.env` files. [See here](#multiple-values-from-a-single-source).
 
 ### Load Values from Kubernetes
 
@@ -389,6 +430,7 @@ GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
 | Value Source Type | Description                              |
 | ----------------- | ---------------------------------------- |
 | `literal`         | Literal static value                     |
+| `file`            | Load values from a file                  |
 | `command`         | Execute an external program by name/path |
 | `shell`           | Execute a shell command                  |
 | `kubernetes`      | Execute a command in a Kubernetes pod    |
@@ -409,6 +451,7 @@ Each source type has its own set of available fields:
 | Value Source Type | Field          | Type            | Default      | Description                                                                                                                                                                       |
 | ----------------- | -------------- | --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                            |
+| `file`            | `path`         | `string`        | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                        |
 | `command`         | `command`      | `array[string]` | **Required** | Command to execute, as `[program, ...arguments]`; the output of the command will be exported                                                                                      |
 | `shell`           | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                      |
 | `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                           |
@@ -425,3 +468,7 @@ env-select supports the following shells:
 - fish
 
 If you use a different shell and would like support for it, please open an issue and I'll see what I can do!
+
+```
+
+```

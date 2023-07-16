@@ -1,13 +1,14 @@
 mod cereal;
-mod inheritance;
+mod inherit;
 mod merge;
+mod qualify;
 #[cfg(test)]
 mod tests;
 
 use crate::config::merge::Merge;
 use anyhow::{anyhow, bail, Context};
 use indexmap::{IndexMap, IndexSet};
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -109,15 +110,25 @@ pub enum ValueSourceKind {
     /// A plain string value
     #[serde(rename = "literal")]
     Literal { value: String },
+
+    /// Load value from a file
+    #[serde(rename = "file")]
+    File {
+        /// File path, relative to the config file that this was defined in
+        path: PathBuf,
+    },
+
     /// A native command (program+arguments) that will be executed at runtime
     /// to get the variable's value. Useful for values that change, secrets,
     /// etc.
     #[serde(rename = "command")]
     NativeCommand { command: NativeCommand },
+
     /// A command that will be executed via the shell. Allows access to
     /// aliases, pipes, etc.
     #[serde(rename = "shell")]
     ShellCommand { command: String },
+
     /// Run a command in a kubernetes pod.
     #[serde(rename = "kubernetes")]
     KubernetesCommand {
@@ -157,9 +168,11 @@ impl Config {
             debug!("Loading config from file {path:?}");
             let content = fs::read_to_string(path)
                 .with_context(|| format!("Error reading file {path:?}"))?;
-            match toml::from_str(&content) {
-                Ok(parsed) => {
-                    trace!("Loaded from file {path:?}: {parsed:?}");
+            match toml::from_str::<Config>(&content) {
+                Ok(mut parsed) => {
+                    debug!("Loaded from file {path:?}: {parsed:?}");
+                    // Qualify relative paths to be absolute
+                    parsed.qualify(path);
                     config.merge(parsed);
                 }
                 Err(error) => {
@@ -170,9 +183,9 @@ impl Config {
 
         trace!("Loaded config (pre-inheritance): {config:#?}");
         // Resolve all `extends` fields
-        config.resolve_inheritance()?;
+        config.inherit()?;
 
-        debug!("Loaded and resolved config: {config:#?}");
+        info!("Loaded and resolved config: {config:#?}");
         Ok(config)
     }
 
@@ -243,6 +256,13 @@ impl FromStr for Name {
         }
 
         Ok(Self(name.into()))
+    }
+}
+
+impl ProfileReference {
+    /// Is this an absolute reference, i.e. does it include an application name?
+    pub fn is_qualified(&self) -> bool {
+        self.application.is_some()
     }
 }
 
@@ -317,7 +337,8 @@ impl ValueSource {
 impl Display for ValueSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0.kind {
-            ValueSourceKind::Literal { value } => write!(f, "{value}"),
+            ValueSourceKind::Literal { value } => write!(f, "\"{value}\""),
+            ValueSourceKind::File { path } => write!(f, "{}", path.display()),
             ValueSourceKind::NativeCommand { command } => {
                 write!(f, "{command} (native)")
             }
