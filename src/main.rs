@@ -145,7 +145,7 @@ fn run(args: &Args) -> anyhow::Result<()> {
 
     let config = Config::load()?;
     let shell = match args.shell {
-        Some(kind) => Shell::from_kind(kind)?,
+        Some(kind) => Shell::from_kind(kind),
         None => Shell::detect()?,
     };
 

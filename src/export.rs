@@ -224,8 +224,3 @@ impl Display for ResolvedValue {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    // TODO
-}

@@ -19,12 +19,14 @@ fn test_subcommand_set(
             $VARIABLE1 \
             $VARIABLE2 \
             $VARIABLE3 \
-            $VARIABLE4
+            $VARIABLE4 \
+            $FILE_VARIABLE1 \
+            $FILE_VARIABLE2
         ",
         shell_kind,
         detect_shell,
     )
     .assert()
     .success()
-    .stdout("abc def ghi jkl");
+    .stdout("abc def ghi jkl 123 456");
 }

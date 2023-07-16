@@ -10,7 +10,8 @@ use rstest_reuse::{self, *};
 #[apply(all_shells)]
 fn test_subcommand_run(shell_kind: &str) {
     // We need ||true because printenv fails when given unknown vars
-    let printenv_command = "printenv VARIABLE1 VARIABLE2 VARIABLE3 VARIABLE4";
+    let printenv_command = "printenv VARIABLE1 VARIABLE2 VARIABLE3 VARIABLE4 \
+        FILE_VARIABLE1 FILE_VARIABLE2";
     execute_script(
         &format!(
             "
@@ -23,5 +24,5 @@ fn test_subcommand_run(shell_kind: &str) {
     )
     .assert()
     .success()
-    .stdout("abc\ndef\nghi\njkl\nEmpty:\n");
+    .stdout("abc\ndef\nghi\njkl\n123\n456\nEmpty:\n");
 }

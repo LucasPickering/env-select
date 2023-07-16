@@ -56,8 +56,8 @@ impl Shell {
 
     /// Create a shell of the given kind. Since no path is given, we'll just
     /// hope it's in PATH if we ever need to execute it.
-    pub fn from_kind(kind: ShellKind) -> anyhow::Result<Self> {
-        Ok(Self { path: None, kind })
+    pub fn from_kind(kind: ShellKind) -> Self {
+        Self { path: None, kind }
     }
 
     /// Print a valid shell script that will initialize the `es` wrapper as
