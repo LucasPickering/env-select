@@ -30,7 +30,7 @@ pub fn prompt_application(
                     // we'll show all the variable mappings
                     let mut buffer = format!("=== {name} ===\n");
                     for (variable, value) in &profile.variables {
-                        buffer += &format!("{variable}={value}\n");
+                        buffer += &format!("{variable} = {value}\n");
                     }
                     buffer
                 })
