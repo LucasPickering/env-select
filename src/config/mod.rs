@@ -349,7 +349,7 @@ impl Display for NativeCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "`{}", self.program)?;
         for argument in &self.arguments {
-            write!(f, " {argument}")?;
+            write!(f, " \"{argument}\"")?;
         }
         write!(f, "`")?;
         Ok(())
