@@ -7,6 +7,17 @@ use serde::{
 };
 use std::str::FromStr;
 
+macro_rules! visit_primitive {
+    ($func:ident, $type:ty) => {
+        fn $func<E>(self, value: $type) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(ValueSource::from_literal(value))
+        }
+    };
+}
+
 // Custom deserialization for ValueSource, to support simple string OR map
 impl<'de> Deserialize<'de> for ValueSource {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -22,15 +33,16 @@ impl<'de> Deserialize<'de> for ValueSource {
                 &self,
                 formatter: &mut std::fmt::Formatter,
             ) -> std::fmt::Result {
-                formatter.write_str("string or map")
+                formatter.write_str("string, boolean, number, or map")
             }
 
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                Ok(ValueSource::from_literal(value))
-            }
+            visit_primitive!(visit_bool, bool);
+            visit_primitive!(visit_u64, u64);
+            visit_primitive!(visit_u128, u128);
+            visit_primitive!(visit_i64, i64);
+            visit_primitive!(visit_i128, i128);
+            visit_primitive!(visit_f64, f64);
+            visit_primitive!(visit_str, &str);
 
             fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
             where

@@ -323,10 +323,10 @@ impl TryFrom<Vec<String>> for NativeCommand {
 impl ValueSource {
     /// Build a [ValueSource] from a simple string value. All extra fields
     /// are populated with defaults.
-    pub fn from_literal(value: &str) -> Self {
+    pub fn from_literal(value: impl ToString) -> Self {
         Self(ValueSourceInner {
             kind: ValueSourceKind::Literal {
-                value: value.to_owned(),
+                value: value.to_string(),
             },
             multiple: false,
             sensitive: false,

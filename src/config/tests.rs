@@ -317,6 +317,17 @@ fn test_parse_value_source() {
 fn test_parse_literal() {
     // Flat syntax
     assert_de_tokens(&literal("abc"), &[Token::Str("abc")]);
+    assert_de_tokens(&literal("true"), &[Token::Bool(true)]);
+    assert_de_tokens(&literal("-16"), &[Token::I8(-16)]);
+    assert_de_tokens(&literal("-16"), &[Token::I16(-16)]);
+    assert_de_tokens(&literal("-16"), &[Token::I32(-16)]);
+    assert_de_tokens(&literal("-16"), &[Token::I64(-16)]);
+    assert_de_tokens(&literal("16"), &[Token::U8(16)]);
+    assert_de_tokens(&literal("16"), &[Token::U16(16)]);
+    assert_de_tokens(&literal("16"), &[Token::U32(16)]);
+    assert_de_tokens(&literal("16"), &[Token::U64(16)]);
+    assert_de_tokens(&literal("420.69000244140625"), &[Token::F32(420.69)]);
+    assert_de_tokens(&literal("420.69"), &[Token::F64(420.69)]);
 
     // Map syntax
     assert_tokens(
@@ -332,17 +343,6 @@ fn test_parse_literal() {
             Token::Str("abc"),
             Token::StructEnd,
         ],
-    );
-
-    // Can't parse non-strings
-    // https://github.com/LucasPickering/env-select/issues/16
-    assert_de_tokens_error::<ValueSource>(
-        &[Token::I32(16)],
-        "invalid type: integer `16`, expected string or map",
-    );
-    assert_de_tokens_error::<ValueSource>(
-        &[Token::Bool(true)],
-        "invalid type: boolean `true`, expected string or map",
     );
 }
 
