@@ -8,7 +8,7 @@ name = "env-select"
 repository = "https://github.com/LucasPickering/env-select"
 # Keep in sync w/ rust-toolchain.toml
 rust-version = "1.67.1"
-version = "0.7.0"
+version = "0.8.0"
 
 [[bin]]
 name = "env-select"
