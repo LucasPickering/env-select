@@ -25,6 +25,7 @@ const FILE_NAME: &str = ".env-select.toml";
 /// [indexmap::IndexMap] in here to preserve ordering from the input files.
 /// This (hopefully) makes usage more intuitive for the use.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// A set of named applications (as in, a use case, purpose, etc.). An
     /// application typically has one or more variables that control it, and
@@ -38,6 +39,7 @@ pub struct Config {
 /// "versions" of the same "application", e.g. dev vs prd for the same service.
 /// Different colors of the same car, so to speak.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Application {
     #[serde(default)]
     pub profiles: IndexMap<Name, Profile>,
@@ -51,6 +53,7 @@ pub struct Name(String);
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Profile {
     /// List of profiles that we'll inherit from. Last has precedence
     #[serde(default)]
