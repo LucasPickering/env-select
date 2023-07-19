@@ -60,7 +60,7 @@ enum Commands {
     /// variable/application
     Run {
         #[command(flatten)]
-        selection_args: SelectionArgs,
+        selection: Selection,
 
         /// Command to execute, as <PROGRAM> [ARGUMENTS]...
         #[arg(required = true, last = true)]
@@ -70,7 +70,7 @@ enum Commands {
     /// Modify shell environment via a configured variable/application
     Set {
         #[command(flatten)]
-        selection_args: SelectionArgs,
+        selection: Selection,
     },
 
     /// Show current configuration, with all available variables and
@@ -81,10 +81,10 @@ enum Commands {
 /// Arguments required for any subcommand that allows applcation/profile
 /// selection.
 #[derive(Clone, Debug, clap::Args)]
-struct SelectionArgs {
-    /// The name of the application to select a profile for
-    // TODO make this optional and allow selecting application interactively
-    application: Name,
+struct Selection {
+    /// The name of the application to select a profile for. If omitted, an
+    /// interactive prompt will be shown to select between possible options
+    application: Option<Name>,
 
     /// Profile to select. If omitted, an interactive prompt will be shown to
     /// select between possible options.
@@ -166,9 +166,9 @@ fn run(args: &Args) -> anyhow::Result<()> {
             }
         }
         Commands::Run {
-            selection_args:
-                SelectionArgs {
-                    application: select_key,
+            selection:
+                Selection {
+                    application,
                     profile,
                 },
             command,
@@ -179,8 +179,8 @@ fn run(args: &Args) -> anyhow::Result<()> {
                 bail!("Empty command")
             };
             let exporter = Exporter::new(config, shell);
-            let environment =
-                exporter.load_environment(select_key, profile.as_ref())?;
+            let environment = exporter
+                .load_environment(application.as_ref(), profile.as_ref())?;
 
             info!("Executing {program:?} {arguments:?} with extra environment {environment}");
             let status = Command::new(program)
@@ -196,14 +196,15 @@ fn run(args: &Args) -> anyhow::Result<()> {
             }
         }
         Commands::Set {
-            selection_args:
-                SelectionArgs {
-                    application: select_key,
+            selection:
+                Selection {
+                    application,
                     profile,
                 },
         } => {
             let exporter = Exporter::new(config, shell);
-            exporter.print_export_commands(select_key, profile.as_ref())
+            exporter
+                .print_export_commands(application.as_ref(), profile.as_ref())
         }
         Commands::Show => {
             println!("{}", toml::to_string(&config)?);

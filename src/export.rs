@@ -1,9 +1,6 @@
 use crate::{
-    config::{
-        Application, Config, DisplayKeys, Name, Profile, ValueSource,
-        ValueSourceKind,
-    },
-    console,
+    config::{Config, Name, Profile, ValueSource, ValueSourceKind},
+    console::{self, prompt_options},
     shell::Shell,
 };
 use anyhow::{anyhow, Context};
@@ -33,29 +30,20 @@ impl Exporter {
     /// prompt.
     pub fn load_environment(
         &self,
-        application_name: &Name,
+        application_name: Option<&Name>,
         profile_name: Option<&Name>,
     ) -> anyhow::Result<Environment> {
-        // Check for the application
-        match self.config.applications.get(application_name) {
-            Some(application) => {
-                let profile = self.load_profile(application, profile_name)?;
-                Environment::from_profile(&self.shell, profile)
-            }
-            None => {
-                // Didn't match anything :(
-                Err(self.config.get_suggestion_error(&format!(
-                    "No known application by the name `{application_name}`."
-                )))
-            }
-        }
+        let application =
+            prompt_options(&self.config.applications, application_name)?;
+        let profile = prompt_options(&application.profiles, profile_name)?;
+        Environment::from_profile(&self.shell, profile)
     }
 
     /// Print the export command, and if appropriate, tell the user about a
     /// sick pro tip.
     pub fn print_export_commands(
         &self,
-        application_name: &Name,
+        application_name: Option<&Name>,
         profile_name: Option<&Name>,
     ) -> anyhow::Result<()> {
         let environment =
@@ -72,31 +60,6 @@ impl Exporter {
 
         console::print_installation_hint()?;
         Ok(())
-    }
-
-    /// Load a profile for an application. If a profile name is given, that will
-    /// be looked up and used (if it exists). If not, the user will be prompted
-    /// to select a profile.
-    fn load_profile<'a>(
-        &'a self,
-        application: &'a Application,
-        default_profile_name: Option<&Name>,
-    ) -> anyhow::Result<&'a Profile> {
-        match default_profile_name {
-            // User passed a profile name as an arg - look for a profile
-            // of that name
-            Some(profile_name) => {
-                application.profiles.get(profile_name).ok_or_else(|| {
-                    anyhow!(
-                        "No profile with the name {}, options are: {}",
-                        profile_name,
-                        application.profiles.display_keys()
-                    )
-                })
-            }
-            // Show a prompt to ask the user which profile to use
-            None => console::prompt_application(application),
-        }
     }
 }
 

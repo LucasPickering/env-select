@@ -192,16 +192,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Build an error that contains a suggestion of all available variables and
-    /// profiles
-    pub fn get_suggestion_error(&self, message: &str) -> anyhow::Error {
-        anyhow!(
-            "{} Try one of the following: {}",
-            message,
-            self.applications.display_keys(),
-        )
-    }
-
     /// Starting at the current directory, walk up the tree and collect the
     /// list of all config files. Return the list of files from
     /// **top-to-bottom**, so that the highest priority file comes last.
