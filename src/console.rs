@@ -1,5 +1,5 @@
-use crate::config::{Application, DisplayKeys, Name, Profile};
-use anyhow::{anyhow, bail};
+use crate::config::{Application, MapExt, Name, Profile};
+use anyhow::bail;
 use atty::Stream;
 use dialoguer::{theme::ColorfulTheme, Select};
 use indexmap::IndexMap;
@@ -15,14 +15,7 @@ pub fn prompt_options<'a, T: Prompt>(
     default_name: Option<&'a Name>,
 ) -> anyhow::Result<&'a T> {
     match default_name {
-        Some(default_name) => options.get(default_name).ok_or_else(|| {
-            anyhow!(
-                "No {} with the name {}, options are: {}",
-                T::SELF_NAME,
-                default_name,
-                options.display_keys()
-            )
-        }),
+        Some(default_name) => options.try_get(default_name),
 
         // Show a prompt to ask the user which profile to use
         None => {

@@ -382,9 +382,15 @@ impl<'a, S: Into<String>, I: IntoIterator<Item = &'a str>> From<(S, I)>
     }
 }
 
-/// Itty bitty little helper trait for printing the keys of a map in a
-/// user-friendly format. Useful for showing application and profile options.
-pub trait DisplayKeys {
+/// Nice little extension trait for IndexMap
+pub trait MapExt {
+    type Key;
+    type Value;
+
+    /// Get a reference to a value by key. If the key isn't in the map, return
+    /// an error with a helpful message.
+    fn try_get(&self, key: &Self::Key) -> anyhow::Result<&Self::Value>;
+
     /// Print the keys of this map, comma-delimited
     fn display_keys(&self) -> String {
         self.display_keys_delimited(", ")
@@ -394,7 +400,16 @@ pub trait DisplayKeys {
     fn display_keys_delimited(&self, separator: &str) -> String;
 }
 
-impl<K: Display + Eq + Hash + PartialEq, V> DisplayKeys for IndexMap<K, V> {
+impl<K: Display + Eq + Hash + PartialEq, V> MapExt for IndexMap<K, V> {
+    type Key = K;
+    type Value = V;
+
+    fn try_get(&self, key: &Self::Key) -> anyhow::Result<&Self::Value> {
+        self.get(key).ok_or_else(|| {
+            anyhow!("Unknown key {}, options are: {}", key, self.display_keys())
+        })
+    }
+
     fn display_keys_delimited(&self, separator: &str) -> String {
         self.keys()
             .map(|key| key.to_string())

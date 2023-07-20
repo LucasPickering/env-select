@@ -75,9 +75,8 @@ enum Commands {
         selection: Selection,
     },
 
-    /// Show current configuration, with all available variables and
-    /// applications
-    Show,
+    /// Print configured values. Useful for debugging and completions
+    Show(ShowArgs),
 }
 
 /// Arguments required for any subcommand that allows applcation/profile
@@ -91,6 +90,20 @@ struct Selection {
     /// Profile to select. If omitted, an interactive prompt will be shown to
     /// select between possible options.
     profile: Option<Name>,
+}
+
+#[derive(Clone, Debug, clap::Args)]
+struct ShowArgs {
+    #[command(subcommand)]
+    command: ShowSubcommand,
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum ShowSubcommand {
+    /// Print full resolved configuration, in TOML format
+    Config,
+    /// Print the name or path to the shell in use
+    Shell,
 }
 
 fn main() -> ExitCode {
@@ -209,8 +222,13 @@ impl Executor {
                     },
             } => self
                 .print_export_commands(application.as_ref(), profile.as_ref()),
-            Commands::Show => {
-                println!("{}", toml::to_string(&self.config)?);
+            Commands::Show(ShowArgs { command }) => {
+                match command {
+                    ShowSubcommand::Config => {
+                        println!("{}", toml::to_string(&self.config)?)
+                    }
+                    ShowSubcommand::Shell => println!("{}", self.shell),
+                }
                 Ok(())
             }
         }
