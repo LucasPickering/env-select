@@ -1,68 +1,17 @@
 use crate::{
-    config::{Config, Name, Profile, ValueSource, ValueSourceKind},
-    console::{self, prompt_options},
+    config::{Profile, ValueSource, ValueSourceKind},
     shell::Shell,
 };
 use anyhow::{anyhow, Context};
-use atty::Stream;
+
 use indexmap::IndexMap;
 use std::{
     fmt::{Display, Formatter},
     fs,
 };
 
-/// Container to handle user selection and command generation. This is the core
-/// logic for the program.
-#[derive(Clone, Debug)]
-pub struct Exporter {
-    config: Config,
-    shell: Shell,
-}
-
-impl Exporter {
-    pub fn new(config: Config, shell: Shell) -> Self {
-        Self { config, shell }
-    }
-
-    /// Build an [Environment] by loading an option for the given select key
-    /// (variable or application). If a default value/profile is given, load
-    /// that. If not, ask the user for select a value/profile via a TUI
-    /// prompt.
-    pub fn load_environment(
-        &self,
-        application_name: Option<&Name>,
-        profile_name: Option<&Name>,
-    ) -> anyhow::Result<Environment> {
-        let application =
-            prompt_options(&self.config.applications, application_name)?;
-        let profile = prompt_options(&application.profiles, profile_name)?;
-        Environment::from_profile(&self.shell, profile)
-    }
-
-    /// Print the export command, and if appropriate, tell the user about a
-    /// sick pro tip.
-    pub fn print_export_commands(
-        &self,
-        application_name: Option<&Name>,
-        profile_name: Option<&Name>,
-    ) -> anyhow::Result<()> {
-        let environment =
-            self.load_environment(application_name, profile_name)?;
-
-        self.shell.print_export(&environment);
-
-        // Tell the user what we exported, on stderr so it doesn't interfere
-        // with shell piping.
-        if atty::isnt(Stream::Stdout) {
-            eprintln!("The following variables will be set:");
-            eprint!("{environment}");
-        }
-
-        console::print_installation_hint()?;
-        Ok(())
-    }
-}
-
+/// Container of VARIABLE=value mappings. This handles resolving value sources
+/// into values, including processing multi-value outputs.
 #[derive(Clone, Debug, Default)]
 pub struct Environment(IndexMap<String, ResolvedValue>);
 
@@ -75,7 +24,10 @@ struct ResolvedValue {
 impl Environment {
     /// Create a new environment from a mapping of variable=value. This will
     /// resolve the value(s) if necessary.
-    fn from_profile(shell: &Shell, profile: &Profile) -> anyhow::Result<Self> {
+    pub fn from_profile(
+        shell: &Shell,
+        profile: &Profile,
+    ) -> anyhow::Result<Self> {
         let mut environment = Self::default();
         for (variable, value) in &profile.variables {
             environment.resolve_variable(
