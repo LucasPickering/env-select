@@ -1,6 +1,6 @@
 //! Utilitied related to profile inheritance resolution
 
-use crate::config::{Config, DisplayKeys, Profile, ProfileReference};
+use crate::config::{Config, MapExt, Profile, ProfileReference};
 use anyhow::{anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use log::trace;

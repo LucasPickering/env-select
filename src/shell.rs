@@ -209,6 +209,15 @@ impl Shell {
     }
 }
 
+impl Display for Shell {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.path {
+            Some(path) => write!(f, "{} (from $SHELL)", path),
+            None => write!(f, "{} (assumed to be in $PATH)", self.kind),
+        }
+    }
+}
+
 impl Display for ShellKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
