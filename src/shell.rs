@@ -1,4 +1,4 @@
-use crate::{config::NativeCommand, console, export::Environment};
+use crate::{config::NativeCommand, console, environment::Environment};
 use anyhow::{anyhow, bail, Context};
 use clap::ValueEnum;
 use log::{debug, info};

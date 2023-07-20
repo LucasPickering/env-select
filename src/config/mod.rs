@@ -385,15 +385,20 @@ impl<'a, S: Into<String>, I: IntoIterator<Item = &'a str>> From<(S, I)>
 /// Itty bitty little helper trait for printing the keys of a map in a
 /// user-friendly format. Useful for showing application and profile options.
 pub trait DisplayKeys {
-    /// Print the keys of this map
-    fn display_keys(&self) -> String;
+    /// Print the keys of this map, comma-delimited
+    fn display_keys(&self) -> String {
+        self.display_keys_delimited(", ")
+    }
+
+    /// Print the keys of this map with the given separator
+    fn display_keys_delimited(&self, separator: &str) -> String;
 }
 
 impl<K: Display + Eq + Hash + PartialEq, V> DisplayKeys for IndexMap<K, V> {
-    fn display_keys(&self) -> String {
+    fn display_keys_delimited(&self, separator: &str) -> String {
         self.keys()
             .map(|key| key.to_string())
             .collect::<Vec<_>>()
-            .join(", ")
+            .join(separator)
     }
 }

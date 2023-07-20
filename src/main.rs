@@ -1,16 +1,18 @@
 mod config;
 mod console;
+mod environment;
 mod error;
-mod export;
 mod shell;
 
 use crate::{
     config::{Config, Name},
+    console::prompt_options,
+    environment::Environment,
     error::ExitCodeError,
-    export::Exporter,
     shell::{Shell, ShellKind},
 };
 use anyhow::{anyhow, bail};
+use atty::Stream;
 use clap::{Parser, Subcommand};
 use log::{error, info, LevelFilter};
 use std::{
@@ -104,8 +106,14 @@ fn main() -> ExitCode {
             _ => LevelFilter::Trace,
         })
         .init();
+    let verbose = args.verbose > 0;
 
-    match run(&args) {
+    fn run(args: Args) -> anyhow::Result<()> {
+        let executor = Executor::new(args)?;
+        executor.run()
+    }
+
+    match run(args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             // If the error includes an exit code, use it
@@ -121,7 +129,7 @@ fn main() -> ExitCode {
                 // debugging.
                 // https://docs.rs/anyhow/1.0.71/anyhow/struct.Error.html#display-representations
                 Err(error) => {
-                    if args.verbose > 0 {
+                    if verbose {
                         error!("{error:#}\n{}", error.backtrace());
                     } else {
                         error!("{error:#}");
@@ -133,82 +141,146 @@ fn main() -> ExitCode {
     }
 }
 
-/// Fallible main function. If this errors out, it can be handled by `main`.
-fn run(args: &Args) -> anyhow::Result<()> {
-    // This handler will put the terminal cursor back if the user ctrl-c's
-    // during the interactive dialogue
-    // https://github.com/mitsuhiko/dialoguer/issues/77
-    ctrlc::set_handler(move || {
-        let term = dialoguer::console::Term::stdout();
-        let _ = term.show_cursor();
-    })?;
+/// Singleton container for executing commands
+struct Executor {
+    args: Args,
+    config: Config,
+    shell: Shell,
+}
 
-    let config = Config::load()?;
-    let shell = match args.shell {
-        Some(kind) => Shell::from_kind(kind),
-        None => Shell::detect()?,
-    };
+impl Executor {
+    fn new(args: Args) -> anyhow::Result<Self> {
+        // This handler will put the terminal cursor back if the user ctrl-c's
+        // during the interactive dialogue
+        // https://github.com/mitsuhiko/dialoguer/issues/77
+        ctrlc::set_handler(move || {
+            let term = dialoguer::console::Term::stdout();
+            let _ = term.show_cursor();
+        })?;
 
-    match &args.command {
-        Commands::Init => shell.print_init_script(),
-        Commands::Test { command } => {
-            // Attempt to parse the given command, and check if it's a `set`
-            match Args::try_parse_from(
-                iter::once(BINARY_NAME)
-                    .chain(command.iter().map(String::as_str)),
-            ) {
-                Ok(Args {
-                    command: Commands::Set { .. },
-                    ..
-                }) => Ok(()),
-                Ok(_) => Err(anyhow!("Not a `set` command: {command:?}")),
-                Err(_) => Err(anyhow!("Invalid command: {command:?}")),
+        let config = Config::load()?;
+        let shell = match args.shell {
+            Some(kind) => Shell::from_kind(kind),
+            None => Shell::detect()?,
+        };
+
+        Ok(Self {
+            args,
+            config,
+            shell,
+        })
+    }
+
+    /// Fallible main function
+    fn run(&self) -> anyhow::Result<()> {
+        match &self.args.command {
+            Commands::Init => self.shell.print_init_script(),
+            Commands::Test { command } => {
+                // Attempt to parse the given command, and check if it's a `set`
+                match Args::try_parse_from(
+                    iter::once(BINARY_NAME)
+                        .chain(command.iter().map(String::as_str)),
+                ) {
+                    Ok(Args {
+                        command: Commands::Set { .. },
+                        ..
+                    }) => Ok(()),
+                    Ok(_) => Err(anyhow!("Not a `set` command: {command:?}")),
+                    Err(_) => Err(anyhow!("Invalid command: {command:?}")),
+                }
             }
-        }
-        Commands::Run {
-            selection:
-                Selection {
-                    application,
-                    profile,
-                },
-            command,
-        } => {
-            let [program, arguments @ ..] = command.as_slice() else {
-                // This *shouldn't* be possible because we marked the argument
-                // as required, so clap should reject an empty command
-                bail!("Empty command")
-            };
-            let exporter = Exporter::new(config, shell);
-            let environment = exporter
-                .load_environment(application.as_ref(), profile.as_ref())?;
-
-            info!("Executing {program:?} {arguments:?} with extra environment {environment}");
-            let status = Command::new(program)
-                .args(arguments)
-                .envs(environment.iter_unmasked())
-                .status()?;
-
-            if status.success() {
+            Commands::Run {
+                selection:
+                    Selection {
+                        application,
+                        profile,
+                    },
+                command,
+            } => self.run_command(
+                command,
+                application.as_ref(),
+                profile.as_ref(),
+            ),
+            Commands::Set {
+                selection:
+                    Selection {
+                        application,
+                        profile,
+                    },
+            } => self
+                .print_export_commands(application.as_ref(), profile.as_ref()),
+            Commands::Show => {
+                println!("{}", toml::to_string(&self.config)?);
                 Ok(())
-            } else {
-                // Forward exit code to user
-                Err(ExitCodeError::from(&status).into())
             }
         }
-        Commands::Set {
-            selection:
-                Selection {
-                    application,
-                    profile,
-                },
-        } => {
-            let exporter = Exporter::new(config, shell);
-            exporter
-                .print_export_commands(application.as_ref(), profile.as_ref())
-        }
-        Commands::Show => {
-            println!("{}", toml::to_string(&config)?);
+    }
+
+    /// Build an [Environment] by loading an option for the given select key
+    /// (variable or application). If a default value/profile is given, load
+    /// that. If not, ask the user for select a value/profile via a TUI
+    /// prompt.
+    fn load_environment(
+        &self,
+        application_name: Option<&Name>,
+        profile_name: Option<&Name>,
+    ) -> anyhow::Result<Environment> {
+        let application =
+            prompt_options(&self.config.applications, application_name)?;
+        let profile = prompt_options(&application.profiles, profile_name)?;
+        Environment::from_profile(&self.shell, profile)
+    }
+
+    /// Run a command in a sub-environment
+    fn run_command(
+        &self,
+        command: &[String],
+        application_name: Option<&Name>,
+        profile_name: Option<&Name>,
+    ) -> anyhow::Result<()> {
+        let environment =
+            self.load_environment(application_name, profile_name)?;
+        let [program, arguments @ ..] = command else {
+            // This *shouldn't* be possible because we marked the
+            // argument as required, so clap should
+            // reject an empty command
+            bail!("Empty command")
+        };
+
+        info!("Executing {program:?} {arguments:?} with extra environment {environment}");
+        let status = Command::new(program)
+            .args(arguments)
+            .envs(environment.iter_unmasked())
+            .status()?;
+
+        if status.success() {
             Ok(())
+        } else {
+            // Forward exit code to user
+            Err(ExitCodeError::from(&status).into())
         }
+    }
+
+    /// Print the export command, and if appropriate, tell the user about a
+    /// sick pro tip.
+    fn print_export_commands(
+        &self,
+        application_name: Option<&Name>,
+        profile_name: Option<&Name>,
+    ) -> anyhow::Result<()> {
+        let environment =
+            self.load_environment(application_name, profile_name)?;
+
+        self.shell.print_export(&environment);
+
+        // Tell the user what we exported, on stderr so it doesn't interfere
+        // with shell piping.
+        if atty::isnt(Stream::Stdout) {
+            eprintln!("The following variables will be set:");
+            eprint!("{environment}");
+        }
+
+        console::print_installation_hint()?;
+        Ok(())
     }
 }
