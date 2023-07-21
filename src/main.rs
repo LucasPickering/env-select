@@ -2,22 +2,25 @@ mod config;
 mod console;
 mod environment;
 mod error;
+mod execute;
+
 mod shell;
 
 use crate::{
-    config::{Config, Name, NativeCommand},
+    config::{Config, Name, Profile},
     console::prompt_options,
     environment::Environment,
     error::ExitCodeError,
+    execute::{apply_side_effects, revert_side_effects, Executable},
     shell::{Shell, ShellKind},
 };
 use anyhow::{anyhow, Context};
 use clap::{Parser, Subcommand};
-use log::{error, info, LevelFilter};
+use log::{error, LevelFilter};
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, ExitCode},
+    process::ExitCode,
 };
 
 /// A utility to select between predefined values or sets of environment
@@ -62,7 +65,8 @@ enum Commands {
         #[arg(required = true, last = true)]
         command: Vec<String>,
 
-        /// TODO
+        /// Invoke the command through the shell, rather than directly. Enables
+        /// using aliases, pipes, etc.
         #[clap(short, long)]
         run_in_shell: bool,
     },
@@ -222,19 +226,35 @@ impl Executor {
         }
     }
 
-    /// Build an [Environment] by loading an option for the given select key
-    /// (variable or application). If a default value/profile is given, load
-    /// that. If not, ask the user for select a value/profile via a TUI
-    /// prompt.
-    fn load_environment(
-        &self,
-        application_name: Option<&Name>,
-        profile_name: Option<&Name>,
-    ) -> anyhow::Result<Environment> {
+    /// Select an application+profile, based on user input. For both application
+    /// and profile, if a default name was given, then that will be used.
+    /// Otherwise, the user will be prompted to select an option via  TUI.
+    fn select_profile<'a>(
+        &'a self,
+        application_name: Option<&'a Name>,
+        profile_name: Option<&'a Name>,
+    ) -> anyhow::Result<&'a Profile> {
         let application =
             prompt_options(&self.config.applications, application_name)?;
-        let profile = prompt_options(&application.profiles, profile_name)?;
-        Environment::from_profile(&self.shell, profile)
+        prompt_options(&application.profiles, profile_name)
+    }
+
+    /// Build an [Environment] from a profile. This will also run pre-setup and
+    /// post-setup side effects.
+    fn load_environment(
+        &self,
+        profile: &Profile,
+    ) -> anyhow::Result<Environment> {
+        // Run pre- and post-resolution side effects
+        apply_side_effects(
+            &profile.pre_export,
+            &self.shell,
+            &Environment::default(),
+        )?;
+        let environment = Environment::from_profile(&self.shell, profile)?;
+        apply_side_effects(&profile.post_export, &self.shell, &environment)?;
+
+        Ok(environment)
     }
 
     /// Print the shell init script, which should be piped to `source`
@@ -255,30 +275,35 @@ impl Executor {
         profile_name: Option<&Name>,
         run_in_shell: bool,
     ) -> anyhow::Result<()> {
-        let environment =
-            self.load_environment(application_name, profile_name)?;
+        let profile = self.select_profile(application_name, profile_name)?;
+        let environment = self.load_environment(profile)?;
 
-        // Convert the string command into NativeCommand
-        let command: NativeCommand = if run_in_shell {
+        let mut executable: Executable = if run_in_shell {
             // Undo the tokenization from clap
-            self.shell.get_shell_command(&command.join(" "))
+            self.shell.executable(&command.join(" "))
         } else {
             // This *shouldn't* fail because we marked the argument as required,
-            // so clap will reject an empty command
+            // meaning clap will reject an empty command
             command.try_into()?
         };
 
-        info!("Executing {command} with extra environment:\n{environment}");
-        let status = Command::new(&command.program)
-            .args(&command.arguments)
-            .envs(environment.iter_unmasked())
-            .status()
-            .context(command)?;
+        // Execute the command
+        let status = executable.environment(&environment).status()?;
+
+        // Clean up side effects, in reverse order
+        revert_side_effects(&profile.post_export, &self.shell, &environment)?;
+        // Teardown of pre-export should *not* have access to the environment,
+        // to mirror the setup conditions
+        revert_side_effects(
+            &profile.pre_export,
+            &self.shell,
+            &Environment::default(),
+        )?;
 
         if status.success() {
             Ok(())
         } else {
-            // Forward exit code to user
+            // Map to our own exit code error type so we can forward to the user
             Err(ExitCodeError::from(&status).into())
         }
     }
@@ -290,8 +315,8 @@ impl Executor {
         profile_name: Option<&Name>,
         source_file: &Path,
     ) -> anyhow::Result<()> {
-        let environment =
-            self.load_environment(application_name, profile_name)?;
+        let profile = self.select_profile(application_name, profile_name)?;
+        let environment = self.load_environment(profile)?;
 
         let source_output = self.shell.export(&environment);
         fs::write(source_file, source_output).with_context(|| {

@@ -1,5 +1,6 @@
 use crate::{
     config::{Profile, ValueSource, ValueSourceKind},
+    execute::{execute_kubernetes, IntoExecutable},
     shell::Shell,
 };
 use anyhow::{anyhow, Context};
@@ -62,12 +63,12 @@ impl Environment {
 
             // Run a program+args locally
             ValueSourceKind::NativeCommand { command } => {
-                Shell::execute_native(command)?
+                command.executable().check_output()?
             }
 
             // Run a command locally via the shell
             ValueSourceKind::ShellCommand { command } => {
-                shell.execute_shell(&command)?
+                shell.executable(&command).check_output()?
             }
 
             // Run a program+args in a kubernetes pod/container
@@ -76,7 +77,7 @@ impl Environment {
                 pod_selector: pod_filter,
                 namespace,
                 container,
-            } => Shell::execute_kubernetes(
+            } => execute_kubernetes(
                 &command,
                 &pod_filter,
                 namespace.as_deref(),
@@ -133,7 +134,7 @@ impl Display for ResolvedValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Mask sensitive values
         if self.sensitive {
-            write!(f, "{}", "*".repeat(self.value.len()))
+            write!(f, "<REDACTED>")
         } else {
             write!(f, "{}", self.value)
         }

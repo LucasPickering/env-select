@@ -1,10 +1,8 @@
 use assert_cmd::Command;
-use rstest::fixture;
 use rstest_reuse::{self, *};
 use std::path::{Path, PathBuf};
 
 /// Command to run env-select
-#[fixture]
 pub fn env_select() -> Command {
     let mut command = Command::cargo_bin("env-select").unwrap();
     command.current_dir(tests_dir());

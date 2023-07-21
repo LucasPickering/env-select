@@ -6,33 +6,7 @@ If viewing this [in GitHub](https://github.com/LucasPickering/env-select/blob/ma
 
 ## Concepts
 
-env-select operates with a few different building blocks. From smallest to largest, they are: Value Source, Variable Mapping, Profile, and Application.
-
-### Value Source
-
-A value source is a means of deriving a string for the shell. Typically this is just a literal string: `"abc"`, but it can also be a command that will be evaluated to a string at runtime.
-
-```sh
-dev # Literal
-$(echo prd) # Command
-```
-
-### Variable Mapping
-
-A key mapped to a value source. Variables are selected as part of a profile.
-
-```sh
-SERVICE1=dev
-```
-
-### Profile
-
-A profile is a set of variable mappings.
-
-```sh
-SERVICE1=dev
-SERVICE2=also-dev
-```
+env-select operates with a few different building blocks. From smallest to largest (rougly), they are: Application, Profile, Variable Mapping, Value Source and Side Effect.
 
 ### Application
 
@@ -47,6 +21,38 @@ SERVICE2=also-dev
 SERVICE1=prd
 SERVICE2=also-prd
 ```
+
+### Profile
+
+A profile is a set of variable mappings.
+
+```sh
+SERVICE1=dev
+SERVICE2=also-dev
+```
+
+### Variable Mapping
+
+A key mapped to a value source. Variables are selected as part of a profile.
+
+```sh
+SERVICE1=dev
+```
+
+### Value Source
+
+A value source is a means of deriving a string for the shell. Typically this is just a literal string: `"abc"`, but it can also be a command that will be evaluated to a string at runtime.
+
+```sh
+dev # Literal
+$(echo prd) # Command
+```
+
+### Side Effect
+
+A side effect is a pairing of procedures: one to execute during environment, and one during teardown. These are used to perform environment configuration beyond environment variables. An example of a side effect is creating a file during setup, then deleting it during teardown.
+
+See [Side Effects usage](#side-effects) for more.
 
 ## Usage
 
@@ -252,6 +258,109 @@ namespace = "development"
 pod_selector = "app=api"
 command = ["sh", "-c", "printenv | grep -E '^(DB_USER|DB_PASSWORD)='"]
 multiple = true
+```
+
+### Side Effects
+
+Side effects allow you to configure your environment beyond simple environment variables, using imperative commands. Each side effects has two commands: setup and teardown. Additionally, there are two points at which side effects can execute: pre-export (before environment variables are exported) and post-export (with environment variables available). So there are four side effect stages in total (in their order of execution):
+
+- Pre-export setup
+- Post-export setup
+- Post-export teardown
+- Pre-export teardown
+
+The meaning of "setup" and "teardown" varies based on what subcommand you're running: `es set` has no teardown stage, as its purpose is to leave the configured environment in place. Currently there is no way to tear down an `es set` environment (see [#37](https://github.com/LucasPickering/env-select/issues/37)). For `es run`, setup occurs before executing the given command, and teardown occurs after.
+
+While supplying both setup and teardown commands isn't required, it's best practice to revert whatever changes your setup command may have made. You should only omit the teardown function if your setup doesn't leave any lingering changes in the environment.
+
+#### Side Effect Examples
+
+Given this config:
+
+```toml
+[applications.server.profiles.base]
+# These commands *cannot* access the constructed environment
+pre_export = [
+  # Native commands - not executed through the shell
+  {setup = ["touch", "host.txt"], teardown = ["rm", "-f", "host.txt"]}
+]
+# These commands can use the constructed environment
+post_export = [
+  # Shell command - no teardown needed because the above command handles it
+  {setup = "echo https://$SERVICE1 > host.txt"}
+]
+
+
+[applications.server.profiles.dev]
+extends = ["base"]
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+
+[applications.server.profiles.prd]
+extends = ["base"]
+variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+```
+
+This will execute in the followingn order for `es set`:
+
+```sh
+> es set server dev
+# 1. Execute pre-export setup (host.txt is created)
+# 2. Construct environment
+# 3. Execute post-export setup (host URL is written to host.txt)
+# 4. Environment is exported to your shell
+> echo $SERVICE1
+dev
+> cat host.txt
+https://dev
+```
+
+And for `es run`:
+
+```sh
+> es run server dev -- cat host.txt
+# 1. Execute pre-export setup (host.txt is created)
+# 2. Construct environment
+# 3. Execute post-export setup (host URL is written to host.txt)
+# 4. `cat host.txt`
+https://dev
+# 5. Execute post-export teardown (in this case, nothing)
+# 6. Clear constructed environment variables
+# 7. Execute pre-export teardown (host.txt is deleted)
+> cat host.txt
+cat: host.txt: No such file or directory
+```
+
+#### Side Effect Ordering
+
+Side effects are executed in their order of definition for setup, and the **reverse** order for teardown. This is to enable side effects that depend on each other; the dependents are torn down before the parents are.
+
+#### Side Effect Inheritance
+
+Inherited side effects are executed *before* side effects defined in the selected profile during setup, and therefore *after* during teardown. For profiles with multiple parents, the *left-most* parent's side effects will execute first.
+
+An example of a config with inheritance:
+
+```toml
+[applications.server.profiles.base1]
+pre_export = [{setup = "echo base1"}]
+
+[applications.server.profiles.base2]
+pre_export = [{setup = "echo base2"}]
+
+[applications.server.profiles.child]
+extends = ["base1", "base2"]
+pre_export = [{setup = "echo child"}]
+```
+
+And how the inheritance would resolve for the `child` profile:
+
+```toml
+[applications.server.profiles.child]
+pre_export = [
+  {setup = "echo base1"},
+  {setup = "echo base2"},
+  {setup = "echo child"},
+]
 ```
 
 ## Configuration

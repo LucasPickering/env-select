@@ -4,7 +4,7 @@ use crate::config::{Config, MapExt, Profile, ProfileReference};
 use anyhow::{anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use log::trace;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 impl Config {
     /// Resolve inheritance for all profiles. Each profile will have its parents
@@ -88,17 +88,22 @@ impl<'a> InheritanceResolver<'a> {
         trace!("Resolving inheritance for profile {reference}");
         visited.insert(reference.clone());
 
-        for parent in parents {
+        // The "intuitive" way to resolve inheritance is to start with the
+        // first parent, and merge in values bottom-up. It turns out the easiest
+        // way is really to do it in reverse: start with the child, and merge
+        // parents right-to-left, giving precedence to what's *already in the
+        // profile*. For vecs, precedence means lower down the list.
+        for parent in parents.iter().rev() {
             trace!("Resolving parent {reference} -> {parent}");
 
             // Check for cycles
-            if visited.contains(&parent) {
+            if visited.contains(parent) {
                 bail!("Inheritance cycle detected: {}", display_cycle(visited));
             }
 
             // Check if parent needs to be resolved. If parent is an unknown
             // path, we'll skip over here and fail down below
-            if let Some(grandparents) = self.unresolved.remove(&parent) {
+            if let Some(grandparents) = self.unresolved.remove(parent) {
                 // Parent is unresolved - resolve it now
                 self.resolve_profile(
                     parent.clone(),
@@ -113,29 +118,51 @@ impl<'a> InheritanceResolver<'a> {
             }
 
             // We know parent is resolved now, merge in their values
-            Self::apply_inheritance(
-                (*self
-                    .profiles
-                    .get(&parent)
-                    .ok_or_else(|| anyhow!("Unknown profile: {}", parent))?)
-                .clone(),
-                self.profiles
-                    .get_mut(&reference)
-                    .ok_or_else(|| anyhow!("Unknown profile: {}", reference))?,
-            );
+            trace!("Merging values from {parent} into {reference}");
+            let parent = (*self
+                .profiles
+                .get(parent)
+                .ok_or_else(|| anyhow!("Unknown profile: {}", parent))?)
+            .clone();
+            let child = self
+                .profiles
+                .get_mut(&reference)
+                .ok_or_else(|| anyhow!("Unknown profile: {}", reference))?;
+            child.inherit_from(parent);
         }
         Ok(())
     }
+}
 
-    /// Merge a parent into a child, i.e. any data in the parent but *not* the
-    /// child will be added to the child
-    fn apply_inheritance(parent: Profile, child: &mut Profile) {
-        // TODO can we use Merge for this? Right now it's parent-prefential,
-        // but we may change that
-        for (variable, parent_value) in parent.variables {
-            // Only insert the parent value if it isn't already in the child
-            child.variables.entry(variable).or_insert(parent_value);
-        }
+trait Inherit {
+    /// Merge a parent into this child. For map-like fields, the child's entries
+    /// will take precedence. For list-like fields, the parent will be appended
+    /// to the *beginning* of the child.
+    fn inherit_from(&mut self, parent: Self);
+}
+
+impl Inherit for Profile {
+    fn inherit_from(&mut self, parent: Self) {
+        self.variables.inherit_from(parent.variables);
+        self.pre_export.inherit_from(parent.pre_export);
+        self.post_export.inherit_from(parent.post_export);
+    }
+}
+
+impl<K: Hash + Eq + PartialEq, V> Inherit for IndexMap<K, V> {
+    fn inherit_from(&mut self, mut parent: Self) {
+        // Start with the parent and add children in, to get parent->child
+        // ordering
+        parent.extend(self.drain(..));
+        *self = parent;
+    }
+}
+
+impl<T> Inherit for Vec<T> {
+    fn inherit_from(&mut self, mut parent: Self) {
+        // Effectively merge the parent at the beginning of the vec
+        parent.append(self);
+        *self = parent;
     }
 }
 
@@ -154,22 +181,183 @@ fn display_cycle<T: Display>(nodes: &IndexSet<T>) -> String {
 #[cfg(test)]
 mod tests {
     use crate::config::{
-        tests::{literal, map, set},
-        Application, Config, Profile,
+        tests::{config, literal, map, set, side_effect},
+        Profile,
     };
     use pretty_assertions::assert_eq;
 
     #[test]
     fn test_inherit_single() {
-        let mut config = Config {
-            applications: map([(
+        let mut cfg = config(vec![(
+            "app",
+            vec![
+                (
+                    "base",
+                    Profile {
+                        extends: set([]),
+                        pre_export: vec![side_effect("base pre", "base pre")],
+                        post_export: vec![side_effect(
+                            "base post",
+                            "base post",
+                        )],
+                        variables: map([
+                            ("VAR1", literal("base")),
+                            ("VAR2", literal("base")),
+                        ]),
+                    },
+                ),
+                (
+                    "child",
+                    Profile {
+                        extends: set(["app/base"]),
+
+                        pre_export: vec![side_effect("child pre", "child pre")],
+                        post_export: vec![side_effect(
+                            "child post",
+                            "child post",
+                        )],
+                        variables: map([
+                            ("VAR1", literal("child")),
+                            // VAR2 comes from base
+                            ("VAR3", literal("child")),
+                        ]),
+                    },
+                ),
+            ],
+        )]);
+        cfg.inherit().expect("Error resolving valid inheritance");
+        assert_eq!(
+            cfg,
+            config(vec![(
                 "app",
-                Application {
-                    profiles: map([
+                vec![
+                    (
+                        "base",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "base pre", "base pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "base post",
+                                "base post",
+                            )],
+                            variables: map([
+                                ("VAR1", literal("base")),
+                                ("VAR2", literal("base")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "child",
+                        Profile {
+                            extends: set(["app/base"]),
+                            pre_export: vec![
+                                side_effect("base pre", "base pre"),
+                                side_effect("child pre", "child pre"),
+                            ],
+                            post_export: vec![
+                                side_effect("base post", "base post"),
+                                side_effect("child post", "child post"),
+                            ],
+                            variables: map([
+                                ("VAR1", literal("child")),
+                                ("VAR3", literal("child")),
+                                ("VAR2", literal("base")),
+                            ]),
+                        },
+                    ),
+                ]
+            )])
+        );
+    }
+
+    #[test]
+    fn test_inherit_linear() {
+        let mut cfg = config(vec![
+            (
+                "app1",
+                vec![
+                    (
+                        "base",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "base pre", "base pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "base post",
+                                "base post",
+                            )],
+                            variables: map([
+                                ("VAR1", literal("base")),
+                                ("VAR2", literal("base")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "child1",
+                        Profile {
+                            extends: set(["app1/base"]),
+                            pre_export: vec![side_effect(
+                                "child1 pre",
+                                "child1 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "child1 post",
+                                "child1 post",
+                            )],
+                            variables: map([
+                                ("VAR1", literal("child1")),
+                                // VAR2 comes from base
+                                ("VAR3", literal("child1")),
+                            ]),
+                        },
+                    ),
+                ],
+            ),
+            (
+                "app2",
+                vec![(
+                    "child2",
+                    Profile {
+                        extends: set(["app1/child1"]),
+                        pre_export: vec![side_effect(
+                            "child2 pre",
+                            "child2 pre",
+                        )],
+                        post_export: vec![side_effect(
+                            "child2 post",
+                            "child2 post",
+                        )],
+                        variables: map([
+                            ("VAR1", literal("child2")),
+                            // VAR2 comes from base
+                            // VAR3 comes from child1
+                            ("VAR4", literal("child2")),
+                        ]),
+                    },
+                )],
+            ),
+        ]);
+        cfg.inherit().expect("Error resolving valid inheritance");
+        assert_eq!(
+            cfg,
+            config(vec![
+                (
+                    "app1",
+                    vec![
                         (
                             "base",
                             Profile {
                                 extends: set([]),
+                                pre_export: vec![side_effect(
+                                    "base pre", "base pre"
+                                )],
+                                post_export: vec![side_effect(
+                                    "base post",
+                                    "base post",
+                                )],
                                 variables: map([
                                     ("VAR1", literal("base")),
                                     ("VAR2", literal("base")),
@@ -177,504 +365,582 @@ mod tests {
                             },
                         ),
                         (
-                            "child",
+                            "child1",
                             Profile {
-                                extends: set(["app/base"]),
+                                extends: set(["app1/base"]),
+                                pre_export: vec![
+                                    side_effect("base pre", "base pre"),
+                                    side_effect("child1 pre", "child1 pre"),
+                                ],
+                                post_export: vec![
+                                    side_effect("base post", "base post"),
+                                    side_effect("child1 post", "child1 post"),
+                                ],
                                 variables: map([
-                                    ("VAR1", literal("child")),
-                                    // VAR2 comes from base
-                                    ("VAR3", literal("child")),
+                                    ("VAR2", literal("base")),
+                                    ("VAR1", literal("child1")),
+                                    ("VAR3", literal("child1")),
                                 ]),
                             },
                         ),
-                    ]),
-                },
-            )]),
-        };
-        config.inherit().expect("Error resolving valid inheritance");
-        assert_eq!(
-            config,
-            Config {
-                applications: map([(
-                    "app",
-                    Application {
-                        profiles: map([
-                            (
-                                "base",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([
-                                        ("VAR1", literal("base")),
-                                        ("VAR2", literal("base")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "child",
-                                Profile {
-                                    extends: set(["app/base"]),
-                                    variables: map([
-                                        ("VAR1", literal("child")),
-                                        ("VAR3", literal("child")),
-                                        ("VAR2", literal("base")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
-                ),]),
-            }
-        );
-    }
-
-    #[test]
-    fn test_inherit_linear() {
-        let mut config = Config {
-            applications: map([
-                (
-                    "app1",
-                    Application {
-                        profiles: map([
-                            (
-                                "base",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([
-                                        ("VAR1", literal("base")),
-                                        ("VAR2", literal("base")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "child1",
-                                Profile {
-                                    extends: set(["app1/base"]),
-                                    variables: map([
-                                        ("VAR1", literal("child1")),
-                                        // VAR2 comes from base
-                                        ("VAR3", literal("child1")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
+                    ],
                 ),
                 (
                     "app2",
-                    Application {
-                        profiles: map([(
-                            "child2",
-                            Profile {
-                                extends: set(["app1/child1"]),
-                                variables: map([
-                                    ("VAR1", literal("child2")),
-                                    // VAR2 comes from base
-                                    // VAR3 comes from child1
-                                    ("VAR4", literal("child2")),
-                                ]),
-                            },
-                        )]),
-                    },
+                    vec![(
+                        "child2",
+                        Profile {
+                            extends: set(["app1/child1"]),
+                            pre_export: vec![
+                                side_effect("base pre", "base pre"),
+                                side_effect("child1 pre", "child1 pre"),
+                                side_effect("child2 pre", "child2 pre"),
+                            ],
+                            post_export: vec![
+                                side_effect("base post", "base post"),
+                                side_effect("child1 post", "child1 post"),
+                                side_effect("child2 post", "child2 post"),
+                            ],
+                            variables: map([
+                                ("VAR2", literal("base")),
+                                ("VAR1", literal("child2")),
+                                ("VAR4", literal("child2")),
+                                ("VAR3", literal("child1")),
+                            ]),
+                        },
+                    )],
                 ),
             ]),
-        };
-        config.inherit().expect("Error resolving valid inheritance");
-        assert_eq!(
-            config,
-            Config {
-                applications: map([
+        );
+    }
+
+    /// This test cases uses a complex inheritance graph to catch bugs around
+    /// multiple inheritance, multi-layer inheritance, multiple independent
+    /// graphs, etc. In reality this kind of inheritance would be useless
+    /// because side effects get duplicated so much, but it's good to have it be
+    /// well-defined.
+    #[test]
+    fn test_inherit_nonlinear() {
+        let mut cfg = config(vec![
+            (
+                "app1",
+                vec![
                     (
-                        "app1",
-                        Application {
-                            profiles: map([
-                                (
-                                    "base",
-                                    Profile {
-                                        extends: set([]),
-                                        variables: map([
-                                            ("VAR1", literal("base")),
-                                            ("VAR2", literal("base")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "child1",
-                                    Profile {
-                                        extends: set(["app1/base"]),
-                                        variables: map([
-                                            ("VAR1", literal("child1")),
-                                            ("VAR3", literal("child1")),
-                                            ("VAR2", literal("base")),
-                                        ]),
-                                    },
-                                ),
+                        "base1",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "base1 pre",
+                                "base1 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "base1 post",
+                                "base1 post",
+                            )],
+                            variables: map([
+                                ("BASE_VAR1", literal("base1")),
+                                ("BASE_VAR2", literal("base1")),
                             ]),
                         },
                     ),
                     (
-                        "app2",
-                        Application {
-                            profiles: map([(
-                                "child2",
-                                Profile {
-                                    extends: set(["app1/child1"]),
-                                    variables: map([
-                                        ("VAR1", literal("child2")),
-                                        ("VAR4", literal("child2")),
-                                        ("VAR3", literal("child1")),
-                                        ("VAR2", literal("base")),
-                                    ]),
-                                },
-                            )]),
+                        "prof2",
+                        Profile {
+                            extends: set(["app1/base1"]),
+                            pre_export: vec![side_effect(
+                                "prof2 pre",
+                                "prof2 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "prof2 post",
+                                "prof2 post",
+                            )],
+                            variables: map([
+                                ("BASE_VAR2", literal("prof2")),
+                                ("CHILD_VAR1", literal("prof2")),
+                            ]),
                         },
                     ),
-                ]),
-            }
-        );
-    }
-
-    #[test]
-    fn test_inherit_nonlinear() {
-        let mut config = Config {
-            applications: map([
+                    (
+                        "base2",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "base2 pre",
+                                "base2 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "base2 post",
+                                "base2 post",
+                            )],
+                            variables: map([
+                                ("BASE_VAR3", literal("base2")),
+                                ("BASE_VAR4", literal("base2")),
+                            ]),
+                        },
+                    ),
+                ],
+            ),
+            (
+                "app2",
+                vec![
+                    (
+                        "prof1",
+                        Profile {
+                            extends: set(["app1/base1"]),
+                            pre_export: vec![side_effect(
+                                "prof1 pre",
+                                "prof1 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "prof1 post",
+                                "prof1 post",
+                            )],
+                            variables: map([("BASE_VAR2", literal("prof1"))]),
+                        },
+                    ),
+                    (
+                        "prof3",
+                        Profile {
+                            extends: set(["app2/prof1", "app1/prof2"]),
+                            pre_export: vec![side_effect(
+                                "prof3 pre",
+                                "prof3 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "prof3 post",
+                                "prof3 post",
+                            )],
+                            variables: map([
+                                ("CHILD_VAR2", literal("prof3")),
+                                ("CHILD_VAR3", literal("prof3")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "prof4",
+                        Profile {
+                            extends: set(["app2/prof1"]),
+                            pre_export: vec![side_effect(
+                                "prof4 pre",
+                                "prof4 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "prof4 post",
+                                "prof4 post",
+                            )],
+                            variables: map([
+                                ("CHILD_VAR4", literal("prof4")),
+                                ("BASE_VAR4", literal("prof4")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "prof5",
+                        Profile {
+                            extends: set([
+                                "app2/prof4",
+                                "app2/prof3",
+                                "app1/base2",
+                            ]),
+                            pre_export: vec![side_effect(
+                                "prof5 pre",
+                                "prof5 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "prof5 post",
+                                "prof5 post",
+                            )],
+                            variables: map([("CHILD_VAR5", literal("prof5"))]),
+                        },
+                    ),
+                ],
+            ),
+            (
+                "app3",
+                vec![
+                    (
+                        "solo",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "solo pre", "solo pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "solo post",
+                                "solo post",
+                            )],
+                            variables: map([("SOLO_VAR1", literal("solo1"))]),
+                        },
+                    ),
+                    (
+                        "striker1",
+                        Profile {
+                            extends: set([]),
+                            pre_export: vec![side_effect(
+                                "striker1 pre",
+                                "striker1 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "striker1 post",
+                                "striker1 post",
+                            )],
+                            variables: map([
+                                ("CHILD_VAR1", literal("striker1")),
+                                ("CHILD_VAR2", literal("striker1")),
+                            ]),
+                        },
+                    ),
+                    (
+                        "striker2",
+                        Profile {
+                            extends: set(["app3/striker1"]),
+                            pre_export: vec![side_effect(
+                                "striker2 pre",
+                                "striker2 pre",
+                            )],
+                            post_export: vec![side_effect(
+                                "striker2 post",
+                                "striker2 post",
+                            )],
+                            variables: map([
+                                ("CHILD_VAR1", literal("striker2")),
+                                ("CHILD_VAR3", literal("striker2")),
+                            ]),
+                        },
+                    ),
+                ],
+            ),
+        ]);
+        cfg.inherit().expect("Error resolving valid inheritance");
+        assert_eq!(
+            cfg,
+            config(vec![
                 (
                     "app1",
-                    Application {
-                        profiles: map([
-                            (
-                                "base1",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([
-                                        ("BASE_VAR1", literal("base1")),
-                                        ("BASE_VAR2", literal("base1")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "prof2",
-                                Profile {
-                                    extends: set(["app1/base1"]),
-                                    variables: map([
-                                        ("BASE_VAR2", literal("prof2")),
-                                        ("CHILD_VAR1", literal("prof2")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "base2",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([
-                                        ("BASE_VAR3", literal("base2")),
-                                        ("BASE_VAR4", literal("base2")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
+                    vec![
+                        (
+                            "base1",
+                            Profile {
+                                extends: set([]),
+                                pre_export: vec![side_effect(
+                                    "base1 pre",
+                                    "base1 pre"
+                                )],
+                                post_export: vec![side_effect(
+                                    "base1 post",
+                                    "base1 post"
+                                )],
+                                variables: map([
+                                    ("BASE_VAR1", literal("base1")),
+                                    ("BASE_VAR2", literal("base1")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof2",
+                            Profile {
+                                extends: set(["app1/base1"]),
+                                pre_export: vec![
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof2 pre", "prof2 pre"),
+                                ],
+                                post_export: vec![
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof2 post", "prof2 post"),
+                                ],
+                                variables: map([
+                                    // base1
+                                    ("BASE_VAR1", literal("base1")),
+                                    // me
+                                    ("BASE_VAR2", literal("prof2")),
+                                    ("CHILD_VAR1", literal("prof2")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "base2",
+                            Profile {
+                                extends: set([]),
+                                pre_export: vec![side_effect(
+                                    "base2 pre",
+                                    "base2 pre"
+                                )],
+                                post_export: vec![side_effect(
+                                    "base2 post",
+                                    "base2 post"
+                                )],
+                                variables: map([
+                                    ("BASE_VAR3", literal("base2")),
+                                    ("BASE_VAR4", literal("base2")),
+                                ]),
+                            },
+                        ),
+                    ],
                 ),
                 (
                     "app2",
-                    Application {
-                        profiles: map([
-                            (
-                                "prof1",
-                                Profile {
-                                    extends: set(["app1/base1"]),
-                                    variables: map([(
-                                        "BASE_VAR2",
-                                        literal("prof1"),
-                                    )]),
-                                },
-                            ),
-                            (
-                                "prof3",
-                                Profile {
-                                    extends: set(["app2/prof1", "app1/prof2"]),
-                                    variables: map([
-                                        ("CHILD_VAR2", literal("prof3")),
-                                        ("CHILD_VAR3", literal("prof3")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "prof4",
-                                Profile {
-                                    extends: set(["app2/prof1"]),
-                                    variables: map([
-                                        ("CHILD_VAR4", literal("prof4")),
-                                        ("BASE_VAR4", literal("prof4")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "prof5",
-                                Profile {
-                                    extends: set([
-                                        "app2/prof4",
-                                        "app2/prof3",
-                                        "app1/base2",
-                                    ]),
-                                    variables: map([(
-                                        "CHILD_VAR5",
-                                        literal("prof5"),
-                                    )]),
-                                },
-                            ),
-                        ]),
-                    },
+                    vec![
+                        (
+                            "prof1",
+                            Profile {
+                                extends: set(["app1/base1"]),
+                                pre_export: vec![
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof1 pre", "prof1 pre"),
+                                ],
+                                post_export: vec![
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof1 post", "prof1 post"),
+                                ],
+                                variables: map([
+                                    ("BASE_VAR1", literal("base1")),
+                                    ("BASE_VAR2", literal("prof1")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof3",
+                            Profile {
+                                extends: set(["app2/prof1", "app1/prof2"]),
+                                pre_export: vec![
+                                    // prof1
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof1 pre", "prof1 pre"),
+                                    // prof2
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof2 pre", "prof2 pre"),
+                                    // me
+                                    side_effect("prof3 pre", "prof3 pre"),
+                                ],
+                                post_export: vec![
+                                    // prof1
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof1 post", "prof1 post"),
+                                    // prof2
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof2 post", "prof2 post"),
+                                    // me
+                                    side_effect("prof3 post", "prof3 post"),
+                                ],
+                                variables: map([
+                                    // prof1
+                                    ("BASE_VAR1", literal("base1")),
+                                    // prof2
+                                    ("BASE_VAR2", literal("prof2")),
+                                    ("CHILD_VAR1", literal("prof2")),
+                                    // me
+                                    ("CHILD_VAR2", literal("prof3")),
+                                    ("CHILD_VAR3", literal("prof3")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof4",
+                            Profile {
+                                extends: set(["app2/prof1"]),
+                                pre_export: vec![
+                                    // prof1
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof1 pre", "prof1 pre"),
+                                    // me
+                                    side_effect("prof4 pre", "prof4 pre"),
+                                ],
+                                post_export: vec![
+                                    // prof1
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof1 post", "prof1 post"),
+                                    // me
+                                    side_effect("prof4 post", "prof4 post"),
+                                ],
+                                variables: map([
+                                    // prof1
+                                    ("BASE_VAR1", literal("base1")),
+                                    ("BASE_VAR2", literal("prof1")),
+                                    // me
+                                    ("CHILD_VAR4", literal("prof4")),
+                                    ("BASE_VAR4", literal("prof4")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "prof5",
+                            Profile {
+                                extends: set([
+                                    "app2/prof4",
+                                    "app2/prof3",
+                                    "app1/base2",
+                                ]),
+                                pre_export: vec![
+                                    // prof4
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof1 pre", "prof1 pre"),
+                                    side_effect("prof4 pre", "prof4 pre"),
+                                    // prof3
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof1 pre", "prof1 pre"),
+                                    side_effect("base1 pre", "base1 pre"),
+                                    side_effect("prof2 pre", "prof2 pre"),
+                                    side_effect("prof3 pre", "prof3 pre"),
+                                    // base2
+                                    side_effect("base2 pre", "base2 pre"),
+                                    // me
+                                    side_effect("prof5 pre", "prof5 pre"),
+                                ],
+                                post_export: vec![
+                                    // prof4
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof1 post", "prof1 post"),
+                                    side_effect("prof4 post", "prof4 post"),
+                                    // prof3
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof1 post", "prof1 post"),
+                                    side_effect("base1 post", "base1 post"),
+                                    side_effect("prof2 post", "prof2 post"),
+                                    side_effect("prof3 post", "prof3 post"),
+                                    // base2
+                                    side_effect("base2 post", "base2 post"),
+                                    // me
+                                    side_effect("prof5 post", "prof5 post"),
+                                ],
+                                variables: map([
+                                    // prof4
+                                    ("BASE_VAR1", literal("base1")),
+                                    ("BASE_VAR2", literal("prof2")),
+                                    ("CHILD_VAR4", literal("prof4")),
+                                    // prof3
+                                    ("CHILD_VAR1", literal("prof2")),
+                                    ("CHILD_VAR2", literal("prof3")),
+                                    ("CHILD_VAR3", literal("prof3")),
+                                    // base2
+                                    ("BASE_VAR3", literal("base2")),
+                                    ("BASE_VAR4", literal("base2")),
+                                    // me
+                                    ("CHILD_VAR5", literal("prof5")),
+                                ]),
+                            },
+                        ),
+                    ],
                 ),
                 (
                     "app3",
-                    Application {
-                        profiles: map([
-                            (
-                                "solo",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([(
-                                        "SOLO_VAR1",
-                                        literal("solo1"),
-                                    )]),
-                                },
-                            ),
-                            (
-                                "striker1",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([
-                                        ("CHILD_VAR1", literal("striker1")),
-                                        ("CHILD_VAR2", literal("striker1")),
-                                    ]),
-                                },
-                            ),
-                            (
-                                "striker2",
-                                Profile {
-                                    extends: set(["app3/striker1"]),
-                                    variables: map([
-                                        ("CHILD_VAR1", literal("striker2")),
-                                        ("CHILD_VAR3", literal("striker2")),
-                                    ]),
-                                },
-                            ),
-                        ]),
-                    },
+                    vec![
+                        (
+                            "solo",
+                            Profile {
+                                extends: set([]),
+                                pre_export: vec![side_effect(
+                                    "solo pre", "solo pre"
+                                )],
+                                post_export: vec![side_effect(
+                                    "solo post",
+                                    "solo post"
+                                )],
+                                variables: map([(
+                                    "SOLO_VAR1",
+                                    literal("solo1"),
+                                )]),
+                            },
+                        ),
+                        (
+                            "striker1",
+                            Profile {
+                                extends: set([]),
+                                pre_export: vec![side_effect(
+                                    "striker1 pre",
+                                    "striker1 pre"
+                                ),],
+                                post_export: vec![side_effect(
+                                    "striker1 post",
+                                    "striker1 post"
+                                ),],
+                                variables: map([
+                                    ("CHILD_VAR1", literal("striker1")),
+                                    ("CHILD_VAR2", literal("striker1")),
+                                ]),
+                            },
+                        ),
+                        (
+                            "striker2",
+                            Profile {
+                                extends: set(["app3/striker1"]),
+                                pre_export: vec![
+                                    side_effect("striker1 pre", "striker1 pre"),
+                                    side_effect("striker2 pre", "striker2 pre"),
+                                ],
+                                post_export: vec![
+                                    side_effect(
+                                        "striker1 post",
+                                        "striker1 post"
+                                    ),
+                                    side_effect(
+                                        "striker2 post",
+                                        "striker2 post"
+                                    ),
+                                ],
+                                variables: map([
+                                    // striker1
+                                    ("CHILD_VAR2", literal("striker1")),
+                                    // me
+                                    ("CHILD_VAR1", literal("striker2")),
+                                    ("CHILD_VAR3", literal("striker2")),
+                                ]),
+                            },
+                        ),
+                    ],
                 ),
             ]),
-        };
-        config.inherit().expect("Error resolving valid inheritance");
-        assert_eq!(
-            config,
-            Config {
-                applications: map([
-                    (
-                        "app1",
-                        Application {
-                            profiles: map([
-                                (
-                                    "base1",
-                                    Profile {
-                                        extends: set([]),
-                                        variables: map([
-                                            ("BASE_VAR1", literal("base1")),
-                                            ("BASE_VAR2", literal("base1")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "prof2",
-                                    Profile {
-                                        extends: set(["app1/base1"]),
-                                        variables: map([
-                                            ("BASE_VAR2", literal("prof2")),
-                                            ("CHILD_VAR1", literal("prof2")),
-                                            // base1
-                                            ("BASE_VAR1", literal("base1")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "base2",
-                                    Profile {
-                                        extends: set([]),
-                                        variables: map([
-                                            ("BASE_VAR3", literal("base2")),
-                                            ("BASE_VAR4", literal("base2")),
-                                        ]),
-                                    },
-                                ),
-                            ]),
-                        },
-                    ),
-                    (
-                        "app2",
-                        Application {
-                            profiles: map([
-                                (
-                                    "prof1",
-                                    Profile {
-                                        extends: set(["app1/base1"]),
-                                        variables: map([
-                                            ("BASE_VAR2", literal("prof1")),
-                                            ("BASE_VAR1", literal("base1")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "prof3",
-                                    Profile {
-                                        extends: set([
-                                            "app2/prof1",
-                                            "app1/prof2"
-                                        ]),
-                                        variables: map([
-                                            ("CHILD_VAR2", literal("prof3")),
-                                            ("CHILD_VAR3", literal("prof3")),
-                                            // prof1
-                                            ("BASE_VAR1", literal("base1")),
-                                            ("BASE_VAR2", literal("prof1")),
-                                            // prof2
-                                            ("CHILD_VAR1", literal("prof2")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "prof4",
-                                    Profile {
-                                        extends: set(["app2/prof1"]),
-                                        variables: map([
-                                            ("CHILD_VAR4", literal("prof4")),
-                                            ("BASE_VAR4", literal("prof4")),
-                                            // prof1
-                                            ("BASE_VAR2", literal("prof1")),
-                                            ("BASE_VAR1", literal("base1")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "prof5",
-                                    Profile {
-                                        extends: set([
-                                            "app2/prof4",
-                                            "app2/prof3",
-                                            "app1/base2",
-                                        ]),
-                                        variables: map([
-                                            ("CHILD_VAR5", literal("prof5"),),
-                                            // prof4
-                                            ("CHILD_VAR4", literal("prof4")),
-                                            ("BASE_VAR4", literal("prof4")),
-                                            ("BASE_VAR2", literal("prof1")),
-                                            ("BASE_VAR1", literal("base1")),
-                                            // prof3
-                                            ("CHILD_VAR2", literal("prof3")),
-                                            ("CHILD_VAR3", literal("prof3")),
-                                            ("CHILD_VAR1", literal("prof2")),
-                                            // base2
-                                            ("BASE_VAR3", literal("base2")),
-                                        ]),
-                                    },
-                                ),
-                            ]),
-                        },
-                    ),
-                    (
-                        "app3",
-                        Application {
-                            profiles: map([
-                                (
-                                    "solo",
-                                    Profile {
-                                        extends: set([]),
-                                        variables: map([(
-                                            "SOLO_VAR1",
-                                            literal("solo1"),
-                                        )]),
-                                    },
-                                ),
-                                (
-                                    "striker1",
-                                    Profile {
-                                        extends: set([]),
-                                        variables: map([
-                                            ("CHILD_VAR1", literal("striker1")),
-                                            ("CHILD_VAR2", literal("striker1")),
-                                        ]),
-                                    },
-                                ),
-                                (
-                                    "striker2",
-                                    Profile {
-                                        extends: set(["app3/striker1"]),
-                                        variables: map([
-                                            ("CHILD_VAR1", literal("striker2")),
-                                            ("CHILD_VAR3", literal("striker2")),
-                                            // striker1
-                                            ("CHILD_VAR2", literal("striker1")),
-                                        ]),
-                                    },
-                                ),
-                            ]),
-                        },
-                    ),
-                ]),
-            }
         );
     }
 
     #[test]
     fn test_inherit_cycle() {
         // One-node cycle
-        let mut config = Config {
-            applications: map([(
-                "app1",
-                Application {
-                    profiles: map([(
-                        "child1",
-                        Profile {
-                            extends: set(["app1/child1"]),
-                            variables: map([]),
-                        },
-                    )]),
+        let mut cfg = config(vec![(
+            "app1",
+            vec![(
+                "child1",
+                Profile {
+                    extends: set(["app1/child1"]),
+                    pre_export: vec![],
+                    post_export: vec![],
+                    variables: map([]),
                 },
-            )]),
-        };
+            )],
+        )]);
         assert_eq!(
-            config
-                .inherit()
+            cfg.inherit()
                 .expect_err("Expected error for inheritance cycle")
                 .to_string(),
             "Inheritance cycle detected: app1/child1 -> app1/child1"
         );
 
         // Two-node cycle
-        let mut config = Config {
-            applications: map([(
-                "app1",
-                Application {
-                    profiles: map([
-                        (
-                            "child1",
-                            Profile {
-                                extends: set(["app1/child2"]),
-                                variables: map([]),
-                            },
-                        ),
-                        (
-                            "child2",
-                            Profile {
-                                extends: set(["app1/child1"]),
-                                variables: map([]),
-                            },
-                        ),
-                    ]),
-                },
-            )]),
-        };
+        let mut cfg = config(vec![(
+            "app1",
+            vec![
+                (
+                    "child1",
+                    Profile {
+                        extends: set(["app1/child2"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([]),
+                    },
+                ),
+                (
+                    "child2",
+                    Profile {
+                        extends: set(["app1/child1"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([]),
+                    },
+                ),
+            ],
+        )]);
         assert_eq!(
-        config
+        cfg
             .inherit()
             .expect_err("Expected error for inheritance cycle")
             .to_string(),
@@ -682,38 +948,40 @@ mod tests {
     );
 
         // 3-node cycle
-        let mut config = Config {
-            applications: map([(
-                "app1",
-                Application {
-                    profiles: map([
-                        (
-                            "child1",
-                            Profile {
-                                extends: set(["app1/child3"]),
-                                variables: map([]),
-                            },
-                        ),
-                        (
-                            "child2",
-                            Profile {
-                                extends: set(["app1/child1"]),
-                                variables: map([]),
-                            },
-                        ),
-                        (
-                            "child3",
-                            Profile {
-                                extends: set(["app1/child2"]),
-                                variables: map([]),
-                            },
-                        ),
-                    ]),
-                },
-            )]),
-        };
+        let mut cfg = config(vec![(
+            "app1",
+            vec![
+                (
+                    "child1",
+                    Profile {
+                        extends: set(["app1/child3"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([]),
+                    },
+                ),
+                (
+                    "child2",
+                    Profile {
+                        extends: set(["app1/child1"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([]),
+                    },
+                ),
+                (
+                    "child3",
+                    Profile {
+                        extends: set(["app1/child2"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([]),
+                    },
+                ),
+            ],
+        )]);
         assert_eq!(
-        config
+        cfg
             .inherit()
             .expect_err("Expected error for inheritance cycle")
             .to_string(),
@@ -723,24 +991,21 @@ mod tests {
 
     #[test]
     fn test_inherit_unknown() {
-        let mut config = Config {
-            applications: map([(
-                "app1",
-                Application {
-                    profiles: map([(
-                        "child1",
-                        Profile {
-                            extends: set(["app1/base"]),
-                            variables: map([]),
-                        },
-                    )]),
+        let mut cfg = config(vec![(
+            "app1",
+            vec![(
+                "child1",
+                Profile {
+                    extends: set(["app1/base"]),
+                    pre_export: vec![],
+                    post_export: vec![],
+                    variables: map([]),
                 },
-            )]),
-        };
+            )],
+        )]);
 
         assert_eq!(
-            config
-                .inherit()
+            cfg.inherit()
                 .expect_err("Expected error for unknown path")
                 .to_string(),
             "Unknown profile: app1/base"

@@ -14,7 +14,8 @@ fn test_subcommand_set(
 ) {
     execute_script(
         "
-        es set integration-tests p1 > /dev/null
+        es set integration-tests p1
+
         echo -n \
             $VARIABLE1 \
             $VARIABLE2 \
@@ -28,5 +29,19 @@ fn test_subcommand_set(
     )
     .assert()
     .success()
-    .stdout("abc def ghi jkl 123 456");
+    .stdout(
+        "pre setup 1
+pre setup 2
+post setup 1 abc
+post setup 2 abc
+The following variables will be set:
+VARIABLE1 = abc
+VARIABLE2 = def
+VARIABLE3 = ghi
+VARIABLE4 = jkl
+FILE_VARIABLE1 = 123
+FILE_VARIABLE2 = 456
+abc def ghi jkl 123 456",
+    )
+    .stderr("");
 }
