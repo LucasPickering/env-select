@@ -124,122 +124,110 @@ impl<'a> Qualify<'a> for PathBuf {
 #[cfg(test)]
 mod tests {
     use crate::config::{
-        tests::{file, map, set},
-        Application, Config, Profile,
+        tests::{config, file, map, set},
+        Profile,
     };
     use pretty_assertions::assert_eq;
 
     #[test]
     fn test_qualify_profile_reference() {
-        let mut config = Config {
-            applications: map([(
-                "app",
-                Application {
-                    profiles: map([
-                        (
-                            "base",
-                            Profile {
-                                extends: set([]),
-                                variables: map([]),
-                            },
-                        ),
-                        (
-                            "child1",
-                            Profile {
-                                extends: set(["base"]),
-                                variables: map([]),
-                            },
-                        ),
-                        (
-                            "child2",
-                            Profile {
-                                extends: set(["app2/base"]),
-                                variables: map([]),
-                            },
-                        ),
-                    ]),
-                },
-            )]),
-        };
-        config.qualify("");
-        assert_eq!(
-            config,
-            Config {
-                applications: map([(
-                    "app",
-                    Application {
-                        profiles: map([
-                            (
-                                "base",
-                                Profile {
-                                    extends: set([]),
-                                    variables: map([]),
-                                },
-                            ),
-                            (
-                                "child1",
-                                Profile {
-                                    extends: set(["app/base"]),
-                                    variables: map([]),
-                                },
-                            ),
-                            (
-                                "child2",
-                                Profile {
-                                    extends: set(["app2/base"]),
-                                    variables: map([]),
-                                },
-                            ),
-                        ]),
+        let mut cfg = config(vec![(
+            "app",
+            vec![
+                (
+                    "base",
+                    Profile {
+                        extends: set([]),
+                        ..Default::default()
                     },
-                )]),
-            }
-        )
+                ),
+                (
+                    "child1",
+                    Profile {
+                        extends: set(["base"]),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    "child2",
+                    Profile {
+                        extends: set(["app2/base"]),
+                        ..Default::default()
+                    },
+                ),
+            ],
+        )]);
+        cfg.qualify("");
+        assert_eq!(
+            cfg,
+            config(vec![(
+                "app",
+                vec![
+                    (
+                        "base",
+                        Profile {
+                            extends: set([]),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        "child1",
+                        Profile {
+                            extends: set(["app/base"]),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        "child2",
+                        Profile {
+                            extends: set(["app2/base"]),
+                            ..Default::default()
+                        },
+                    ),
+                ],
+            )])
+        );
     }
 
     #[test]
     fn test_qualify_file_value_path() {
-        let mut config = Config {
-            applications: map([(
-                "app",
-                Application {
-                    profiles: map([(
-                        "prof",
-                        Profile {
-                            extends: set([]),
-                            variables: map([
-                                ("VAR1", file("var.txt")),
-                                ("VAR2", file("../var.txt")),
-                                ("VAR3", file("data/var.txt")),
-                                ("VAR4", file("/usr/var.txt")),
-                            ]),
-                        },
-                    )]),
+        let mut cfg = config(vec![(
+            "app",
+            vec![(
+                "prof",
+                Profile {
+                    extends: set([]),
+                    pre_export: vec![],
+                    post_export: vec![],
+                    variables: map([
+                        ("VAR1", file("var.txt")),
+                        ("VAR2", file("../var.txt")),
+                        ("VAR3", file("data/var.txt")),
+                        ("VAR4", file("/usr/var.txt")),
+                    ]),
                 },
-            )]),
-        };
-        config.qualify("/root/.env-select.toml");
+            )],
+        )]);
+        cfg.qualify("/root/.env-select.toml");
         assert_eq!(
-            config,
-            Config {
-                applications: map([(
-                    "app",
-                    Application {
-                        profiles: map([(
-                            "prof",
-                            Profile {
-                                extends: set([]),
-                                variables: map([
-                                    ("VAR1", file("/root/var.txt")),
-                                    ("VAR2", file("/root/../var.txt")),
-                                    ("VAR3", file("/root/data/var.txt")),
-                                    ("VAR4", file("/usr/var.txt")),
-                                ]),
-                            },
-                        )]),
+            cfg,
+            config(vec![(
+                "app",
+                vec![(
+                    "prof",
+                    Profile {
+                        extends: set([]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([
+                            ("VAR1", file("/root/var.txt")),
+                            ("VAR2", file("/root/../var.txt")),
+                            ("VAR3", file("/root/data/var.txt")),
+                            ("VAR4", file("/usr/var.txt")),
+                        ]),
                     },
-                )]),
-            }
+                )],
+            )])
         );
     }
 }

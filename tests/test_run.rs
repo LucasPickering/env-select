@@ -24,7 +24,25 @@ fn test_subcommand_run_native(shell_kind: &str) {
     )
     .assert()
     .success()
-    .stdout("abc\ndef\nghi\njkl\n123\n456\nEmpty:\n");
+    .stdout(
+        "pre setup 1
+pre setup 2
+post setup 1 abc
+post setup 2 abc
+abc
+def
+ghi
+jkl
+123
+456
+post teardown 2 abc
+post teardown 1 abc
+pre teardown 2
+pre teardown 1
+Empty:
+",
+    )
+    .stderr("");
 }
 
 /// Test that `es run --run-in-shell` executes the command within a subshell
@@ -45,5 +63,18 @@ fn test_subcommand_run_shell(shell_kind: &str) {
     )
     .assert()
     .success()
-    .stdout("abc def ghi jkl 123 456\nEmpty:\n");
+    .stdout(
+        "pre setup 1
+pre setup 2
+post setup 1 abc
+post setup 2 abc
+abc def ghi jkl 123 456
+post teardown 2 abc
+post teardown 1 abc
+pre teardown 2
+pre teardown 1
+Empty:
+",
+    )
+    .stderr("");
 }

@@ -1,5 +1,5 @@
-use crate::{config::NativeCommand, environment::Environment};
-use anyhow::{anyhow, bail, Context};
+use crate::{environment::Environment, execute::Executable};
+use anyhow::anyhow;
 use clap::ValueEnum;
 use log::{debug, info};
 use std::{
@@ -7,7 +7,6 @@ use std::{
     ffi::OsStr,
     fmt::{Debug, Display, Formatter, Write},
     path::PathBuf,
-    process::{Command, Stdio},
 };
 
 /// In each wrapper, this key will be replaced by the path to env-select
@@ -103,114 +102,13 @@ impl Shell {
         output
     }
 
-    /// Get a NativeCommand to execute the given command in this shell
-    pub fn get_shell_command(&self, command: &str) -> NativeCommand {
-        // Use the full shell path if we have it. Otherwise, just pass the
-        // shell name and hope it's in PATH
-        let shell_executable =
+    /// Get an [Executable] command to run in this shell
+    pub fn executable(&self, command: &str) -> Executable {
+        // Use the full shell path if we have it. Otherwise, just pass
+        // the shell name and hope it's in PATH
+        let shell_program =
             self.path.clone().unwrap_or_else(|| self.kind.to_string());
-        (shell_executable, ["-c", command]).into()
-    }
-
-    /// Execute a command in this shell, and return the stdout value.
-    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
-        Self::execute_native(self.get_shell_command(command))
-    }
-
-    /// Execute a program with the given arguments, and return the stdout value.
-    pub fn execute_native<C: Into<NativeCommand>>(
-        command: C,
-    ) -> anyhow::Result<String> {
-        let command: NativeCommand = command.into();
-        info!("Executing {command}");
-
-        let output = Command::new(&command.program)
-            .args(&command.arguments)
-            // Forward stderr to the user, in case something goes wrong
-            .stderr(Stdio::inherit())
-            .output()
-            .with_context(|| format!("Error executing {command}"))?;
-        // TODO Replace with ExitStatus::exit_ok
-        // https://github.com/rust-lang/rust/issues/84908
-        if output.status.success() {
-            Ok(String::from_utf8(output.stdout)
-                .with_context(|| {
-                    format!("Error decoding output for {command}")
-                })?
-                .trim_end()
-                .to_string())
-        } else {
-            Err(anyhow!(
-                "{command} failed with exit code {}",
-                output
-                    .status
-                    .code()
-                    .map(|code| code.to_string())
-                    .unwrap_or_else(|| "unknown".into())
-            ))
-        }
-    }
-
-    /// Execute a command in a kubernetes pod, and return the output
-    pub fn execute_kubernetes(
-        command: &NativeCommand,
-        pod_selector: &str,
-        namespace: Option<&str>,
-        container: Option<&str>,
-    ) -> anyhow::Result<String> {
-        info!(
-            "Executing {command} in kubernetes namespace={}, \
-                pod_selector={}, container={}",
-            namespace.unwrap_or_default(),
-            pod_selector,
-            container.unwrap_or_default()
-        );
-
-        // Find the name of the pod to execute in
-        let mut kgp_arguments = vec![
-            "get",
-            "pod",
-            "-l",
-            pod_selector,
-            "--no-headers",
-            "-o",
-            "custom-columns=:metadata.name",
-        ];
-        // Add namespace filter if given, otherwise use current namespace
-        if let Some(namespace) = namespace {
-            kgp_arguments.extend(["-n", namespace]);
-        }
-        let pod_output = Self::execute_native(("kubectl", kgp_arguments))?;
-        let lines = pod_output.lines().collect::<Vec<_>>();
-        debug!("Found pods: {lines:?}");
-        let pod_name = match lines.as_slice() {
-            [] => bail!(
-                "No pods matching filter {} in namespace {}",
-                pod_selector,
-                namespace.unwrap_or("<none>")
-            ),
-            [pod_name] => pod_name,
-            pod_names => bail!(
-                "Multiple pods matching filter {} in namespace {}: {:?}",
-                pod_selector,
-                namespace.unwrap_or("<none>"),
-                pod_names
-            ),
-        };
-
-        // Use `kubectl exec` to run the command in the pod
-        let mut kexec_arguments = vec!["exec", pod_name];
-        // Add namespace and container filters, if given
-        if let Some(namespace) = &namespace {
-            kexec_arguments.extend(["-n", namespace]);
-        }
-        if let Some(container) = &container {
-            kexec_arguments.extend(["-c", container]);
-        }
-        // Add the actual command
-        kexec_arguments.extend(["--", &command.program]);
-        kexec_arguments.extend(command.arguments.iter().map(String::as_str));
-        Self::execute_native(("kubectl", kexec_arguments))
+        (shell_program, ["-c", command]).into()
     }
 }
 

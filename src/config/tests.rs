@@ -12,15 +12,27 @@ use serde_test::{
 /// A general config to test parsing. This doesn't include all edge cases, but
 /// it's got a good variety
 const CONFIG: &str = r#"
+[applications.base.profiles.base]
+pre_export = [
+    {setup = ["echo", "native", "pre", "setup"], teardown = ["echo", "native", "pre", "teardown"]},
+    {setup = "echo shell pre setup", teardown = "echo shell pre teardown"},
+]
+post_export = [
+    {setup = ["echo", "native", "post", "setup"], teardown = ["echo", "native", "post", "teardown"]},
+    {setup = "echo shell post setup", teardown = "echo shell post teardown"},
+]
 [applications.base.profiles.base.variables]
 I_AM_HERE = "true"
+
 
 [applications.server.profiles.base]
 extends = ["base/base"]
 variables = {USERNAME = "user"}
+
 [applications.server.profiles.dev]
 extends = ["base"]
 variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
+
 [applications.server.profiles.prd]
 extends = ["base"]
 [applications.server.profiles.prd.variables]
@@ -34,6 +46,7 @@ extends = ["base"]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
 SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
 SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
+
 
 [applications.empty]
 "#;
@@ -60,6 +73,27 @@ impl From<ValueSourceKind> for ValueSource {
     }
 }
 
+/// Shorthand for creating a native side effect
+impl<const N: usize> From<[&str; N]> for SideEffectCommand {
+    fn from(value: [&str; N]) -> Self {
+        Self::Native(
+            value
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<String>>()
+                .try_into()
+                .unwrap(),
+        )
+    }
+}
+
+/// Shorthand for creating a shell side effect
+impl From<&str> for SideEffectCommand {
+    fn from(value: &str) -> Self {
+        Self::Shell(value.into())
+    }
+}
+
 // Builder-like functions to make it easy to create value sources
 impl ValueSource {
     fn sensitive(mut self, sensitive: bool) -> Self {
@@ -70,6 +104,26 @@ impl ValueSource {
     fn multiple(mut self, multiple: bool) -> Self {
         self.0.multiple = multiple;
         self
+    }
+}
+
+/// Helper to create a full config, from a mapping of applications and profiles
+pub fn config(applications: Vec<(&str, Vec<(&str, Profile)>)>) -> Config {
+    Config {
+        applications: applications
+            .into_iter()
+            .map(|(name, profiles)| {
+                (
+                    (*name).into(),
+                    Application {
+                        profiles: profiles
+                            .into_iter()
+                            .map(|(name, profile)| ((*name).into(), profile))
+                            .collect(),
+                    },
+                )
+            })
+            .collect(),
     }
 }
 
@@ -125,92 +179,116 @@ pub fn shell(command: &str) -> ValueSource {
     .into()
 }
 
+/// Create a side effect from (setup, teardown)
+pub fn side_effect<S: Into<SideEffectCommand>, T: Into<SideEffectCommand>>(
+    setup: S,
+    teardown: T,
+) -> SideEffect {
+    SideEffect {
+        setup: Some(setup.into()),
+        teardown: Some(teardown.into()),
+    }
+}
+
 /// General catch-all test
 #[test]
 fn test_parse_config() {
-    let expected = Config {
-        applications: map([
-            (
+    let expected = config(vec![
+        (
+            "base",
+            vec![(
                 "base",
-                Application {
-                    profiles: map([(
-                        "base",
-                        Profile {
-                            extends: set([]),
-                            variables: map([("I_AM_HERE", literal("true"))]),
-                        },
-                    )]),
+                Profile {
+                    extends: set([]),
+                    pre_export: vec![
+                        side_effect(
+                            ["echo", "native", "pre", "setup"],
+                            ["echo", "native", "pre", "teardown"],
+                        ),
+                        side_effect(
+                            "echo shell pre setup",
+                            "echo shell pre teardown",
+                        ),
+                    ],
+                    post_export: vec![
+                        side_effect(
+                            ["echo", "native", "post", "setup"],
+                            ["echo", "native", "post", "teardown"],
+                        ),
+                        side_effect(
+                            "echo shell post setup",
+                            "echo shell post teardown",
+                        ),
+                    ],
+                    variables: map([("I_AM_HERE", literal("true"))]),
                 },
-            ),
-            (
-                "server",
-                Application {
-                    profiles: map([
-                        (
-                            "base",
-                            Profile {
-                                extends: set(["base/base"]),
-                                variables: map([("USERNAME", literal("user"))]),
-                            },
-                        ),
-                        (
-                            "dev",
-                            Profile {
-                                extends: set(["base"]),
-                                variables: map([
-                                    ("SERVICE1", literal("dev")),
-                                    ("SERVICE2", literal("also-dev")),
-                                ]),
-                            },
-                        ),
-                        (
-                            "prd",
-                            Profile {
-                                extends: set(["base"]),
-                                variables: map([
-                                    ("SERVICE1", literal("prd")),
-                                    ("SERVICE2", literal("also-prd")),
-                                    (
-                                        "multiple",
-                                        literal("MULTI1=multi1\nMULTI2=multi2")
-                                            .multiple(true),
-                                    ),
-                                ]),
-                            },
-                        ),
-                        (
-                            "secret",
-                            Profile {
-                                extends: set(["base"]),
-                                variables: map([
-                                    (
-                                        "SERVICE1",
-                                        literal("secret").sensitive(true),
-                                    ),
-                                    (
-                                        "SERVICE2",
-                                        native("echo", ["also-secret"])
-                                            .sensitive(true),
-                                    ),
-                                    (
-                                        "SERVICE3",
-                                        shell("echo secret_password | base64")
-                                            .sensitive(true),
-                                    ),
-                                ]),
-                            },
-                        ),
-                    ]),
-                },
-            ),
-            (
-                "empty",
-                Application {
-                    profiles: IndexMap::new(),
-                },
-            ),
-        ]),
-    };
+            )],
+        ),
+        (
+            "server",
+            vec![
+                (
+                    "base",
+                    Profile {
+                        extends: set(["base/base"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([("USERNAME", literal("user"))]),
+                    },
+                ),
+                (
+                    "dev",
+                    Profile {
+                        extends: set(["base"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([
+                            ("SERVICE1", literal("dev")),
+                            ("SERVICE2", literal("also-dev")),
+                        ]),
+                    },
+                ),
+                (
+                    "prd",
+                    Profile {
+                        extends: set(["base"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([
+                            ("SERVICE1", literal("prd")),
+                            ("SERVICE2", literal("also-prd")),
+                            (
+                                "multiple",
+                                literal("MULTI1=multi1\nMULTI2=multi2")
+                                    .multiple(true),
+                            ),
+                        ]),
+                    },
+                ),
+                (
+                    "secret",
+                    Profile {
+                        extends: set(["base"]),
+                        pre_export: vec![],
+                        post_export: vec![],
+                        variables: map([
+                            ("SERVICE1", literal("secret").sensitive(true)),
+                            (
+                                "SERVICE2",
+                                native("echo", ["also-secret"]).sensitive(true),
+                            ),
+                            (
+                                "SERVICE3",
+                                shell("echo secret_password | base64")
+                                    .sensitive(true),
+                            ),
+                        ]),
+                    },
+                ),
+            ],
+        ),
+        ("empty", vec![]),
+    ]);
     assert_eq!(toml::from_str::<Config>(CONFIG).unwrap(), expected);
 }
 
@@ -341,6 +419,51 @@ fn test_parse_literal() {
             Token::Str("literal"),
             Token::Str("value"),
             Token::Str("abc"),
+            Token::StructEnd,
+        ],
+    );
+}
+
+#[test]
+fn test_parse_side_effects() {
+    // Native
+    assert_tokens(
+        &side_effect(["echo", "setup"], ["echo", "teardown"]),
+        &[
+            Token::Struct {
+                name: "SideEffect",
+                len: 2,
+            },
+            Token::Str("setup"),
+            Token::Some,
+            Token::Seq { len: Some(2) },
+            Token::Str("echo"),
+            Token::Str("setup"),
+            Token::SeqEnd,
+            Token::Str("teardown"),
+            Token::Some,
+            Token::Seq { len: Some(2) },
+            Token::Str("echo"),
+            Token::Str("teardown"),
+            Token::SeqEnd,
+            Token::StructEnd,
+        ],
+    );
+
+    // Shell
+    assert_tokens(
+        &side_effect("echo setup", "echo teardown"),
+        &[
+            Token::Struct {
+                name: "SideEffect",
+                len: 2,
+            },
+            Token::Str("setup"),
+            Token::Some,
+            Token::Str("echo setup"),
+            Token::Str("teardown"),
+            Token::Some,
+            Token::Str("echo teardown"),
             Token::StructEnd,
         ],
     );

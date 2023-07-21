@@ -25,13 +25,12 @@ const FILE_NAME: &str = ".env-select.toml";
 /// [indexmap::IndexMap] in here to preserve ordering from the input files.
 /// This (hopefully) makes usage more intuitive for the use.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// A set of named applications (as in, a use case, purpose, etc.). An
     /// application typically has one or more variables that control it, and
     /// each variable may multiple values to select between. Each value set
     /// is known as a "profile".
-    #[serde(default)]
     pub applications: IndexMap<Name, Application>,
 }
 
@@ -39,9 +38,8 @@ pub struct Config {
 /// "versions" of the same "application", e.g. dev vs prd for the same service.
 /// Different colors of the same car, so to speak.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct Application {
-    #[serde(default)]
     pub profiles: IndexMap<Name, Profile>,
 }
 
@@ -53,15 +51,16 @@ pub struct Name(String);
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct Profile {
     /// List of profiles that we'll inherit from. Last has precedence
-    #[serde(default)]
     pub extends: IndexSet<ProfileReference>,
-
     /// The meat
-    #[serde(default)]
     pub variables: IndexMap<String, ValueSource>,
+    /// Imperative commands to run *before* resolving an environment
+    pub pre_export: Vec<SideEffect>,
+    /// Imperative commands to run *after* resolving an environment
+    pub post_export: Vec<SideEffect>,
 }
 
 /// Pointer to a profile, relative to some "self" profile. (De)serializes as
@@ -147,6 +146,30 @@ pub enum ValueSourceKind {
         /// `kubectl.kubernetes.io/default-container` annotation.
         container: Option<String>,
     },
+}
+
+/// A pair of imperative commands to run. The setup command is run during
+/// environment setup (either before or after exporting the environment), while
+/// the teardown is run during cleanup. The teardown will run in the mirrored
+/// position of the setup. E.g. if the setup is run *pre*-export, the teardown
+/// will be run *after* clearing the environment.
+///
+/// Each field is optional to support side effects that don't require teardown
+/// (or more rarely, don't require setup). Generally though, you should specify
+/// both.
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+pub struct SideEffect {
+    setup: Option<SideEffectCommand>,
+    teardown: Option<SideEffectCommand>,
+}
+
+/// A single imperative command to run as part of a side effect. Could be either
+/// the setup or the teardown.
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[serde(untagged)]
+pub enum SideEffectCommand {
+    Native(NativeCommand),
+    Shell(String),
 }
 
 /// A native command is a program name/path, with zero or more arguments. This
@@ -302,6 +325,16 @@ impl ValueSource {
     }
 }
 
+impl SideEffect {
+    pub fn setup(&self) -> Option<&SideEffectCommand> {
+        self.setup.as_ref()
+    }
+
+    pub fn teardown(&self) -> Option<&SideEffectCommand> {
+        self.teardown.as_ref()
+    }
+}
+
 impl Display for ValueSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0.kind {
@@ -366,18 +399,6 @@ impl TryFrom<Vec<String>> for NativeCommand {
             })
         } else {
             Err(anyhow!("Command array must have at least one element"))
-        }
-    }
-}
-
-// This makes it more ergonomic to call execute_native
-impl<S1: Into<String>, S2: Into<String>, I: IntoIterator<Item = S2>>
-    From<(S1, I)> for NativeCommand
-{
-    fn from((program, arguments): (S1, I)) -> Self {
-        Self {
-            program: program.into(),
-            arguments: arguments.into_iter().map(S2::into).collect(),
         }
     }
 }
