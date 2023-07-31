@@ -11,7 +11,7 @@ use crate::{
     error::ExitCodeError,
     shell::{Shell, ShellKind},
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use atty::Stream;
 use clap::{Parser, Subcommand};
 use log::{error, info, LevelFilter};
@@ -275,7 +275,8 @@ impl Executor {
         let status = Command::new(&command.program)
             .args(&command.arguments)
             .envs(environment.iter_unmasked())
-            .status()?;
+            .status()
+            .context(command)?;
 
         if status.success() {
             Ok(())
