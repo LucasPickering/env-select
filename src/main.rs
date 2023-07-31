@@ -5,13 +5,13 @@ mod error;
 mod shell;
 
 use crate::{
-    config::{Config, Name},
+    config::{Config, Name, NativeCommand},
     console::prompt_options,
     environment::Environment,
     error::ExitCodeError,
     shell::{Shell, ShellKind},
 };
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use atty::Stream;
 use clap::{Parser, Subcommand};
 use log::{error, info, LevelFilter};
@@ -67,6 +67,10 @@ enum Commands {
         /// Command to execute, as <PROGRAM> [ARGUMENTS]...
         #[arg(required = true, last = true)]
         command: Vec<String>,
+
+        /// TODO
+        #[clap(short, long)]
+        run_in_shell: bool,
     },
 
     /// Modify shell environment via a configured variable/application
@@ -122,8 +126,8 @@ fn main() -> ExitCode {
     let verbose = args.verbose > 0;
 
     fn run(args: Args) -> anyhow::Result<()> {
-        let executor = Executor::new(args)?;
-        executor.run()
+        let executor = Executor::new(args.shell)?;
+        executor.run(args)
     }
 
     match run(args) {
@@ -156,13 +160,12 @@ fn main() -> ExitCode {
 
 /// Singleton container for executing commands
 struct Executor {
-    args: Args,
     config: Config,
     shell: Shell,
 }
 
 impl Executor {
-    fn new(args: Args) -> anyhow::Result<Self> {
+    fn new(shell_kind: Option<ShellKind>) -> anyhow::Result<Self> {
         // This handler will put the terminal cursor back if the user ctrl-c's
         // during the interactive dialogue
         // https://github.com/mitsuhiko/dialoguer/issues/77
@@ -172,21 +175,17 @@ impl Executor {
         })?;
 
         let config = Config::load()?;
-        let shell = match args.shell {
+        let shell = match shell_kind {
             Some(kind) => Shell::from_kind(kind),
             None => Shell::detect()?,
         };
 
-        Ok(Self {
-            args,
-            config,
-            shell,
-        })
+        Ok(Self { config, shell })
     }
 
     /// Fallible main function
-    fn run(&self) -> anyhow::Result<()> {
-        match &self.args.command {
+    fn run(self, args: Args) -> anyhow::Result<()> {
+        match args.command {
             Commands::Init => self.shell.print_init_script(),
             Commands::Test { command } => {
                 // Attempt to parse the given command, and check if it's a `set`
@@ -209,10 +208,12 @@ impl Executor {
                         profile,
                     },
                 command,
+                run_in_shell,
             } => self.run_command(
                 command,
                 application.as_ref(),
                 profile.as_ref(),
+                run_in_shell,
             ),
             Commands::Set {
                 selection:
@@ -252,22 +253,27 @@ impl Executor {
     /// Run a command in a sub-environment
     fn run_command(
         &self,
-        command: &[String],
+        command: Vec<String>,
         application_name: Option<&Name>,
         profile_name: Option<&Name>,
+        run_in_shell: bool,
     ) -> anyhow::Result<()> {
         let environment =
             self.load_environment(application_name, profile_name)?;
-        let [program, arguments @ ..] = command else {
-            // This *shouldn't* be possible because we marked the
-            // argument as required, so clap should
-            // reject an empty command
-            bail!("Empty command")
+
+        // Convert the string command into NativeCommand
+        let command: NativeCommand = if run_in_shell {
+            // Undo the tokenization from clap
+            self.shell.get_shell_command(&command.join(" "))
+        } else {
+            // This *shouldn't* fail because we marked the argument as required,
+            // so clap will reject an empty command
+            command.try_into()?
         };
 
-        info!("Executing {program:?} {arguments:?} with extra environment {environment}");
-        let status = Command::new(program)
-            .args(arguments)
+        info!("Executing {command} with extra environment:\n{environment}");
+        let status = Command::new(&command.program)
+            .args(&command.arguments)
             .envs(environment.iter_unmasked())
             .status()?;
 

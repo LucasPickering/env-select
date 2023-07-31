@@ -288,31 +288,6 @@ impl Display for ProfileReference {
     }
 }
 
-// For serialization
-impl From<NativeCommand> for Vec<String> {
-    fn from(value: NativeCommand) -> Self {
-        let mut elements = value.arguments;
-        elements.insert(0, value.program); // O(n)! Spooky!
-        elements
-    }
-}
-
-// For deserialization
-impl TryFrom<Vec<String>> for NativeCommand {
-    type Error = anyhow::Error;
-
-    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
-        if !value.is_empty() {
-            Ok(Self {
-                program: value.remove(0),
-                arguments: value,
-            })
-        } else {
-            Err(anyhow!("Command array must have at least one element"))
-        }
-    }
-}
-
 impl ValueSource {
     /// Build a [ValueSource] from a simple string value. All extra fields
     /// are populated with defaults.
@@ -370,14 +345,39 @@ impl Display for NativeCommand {
     }
 }
 
+// For serialization
+impl From<NativeCommand> for Vec<String> {
+    fn from(value: NativeCommand) -> Self {
+        let mut elements = value.arguments;
+        elements.insert(0, value.program); // O(n)! Spooky!
+        elements
+    }
+}
+
+// For deserialization
+impl TryFrom<Vec<String>> for NativeCommand {
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
+        if !value.is_empty() {
+            Ok(Self {
+                program: value.remove(0),
+                arguments: value,
+            })
+        } else {
+            Err(anyhow!("Command array must have at least one element"))
+        }
+    }
+}
+
 // This makes it more ergonomic to call execute_native
-impl<'a, S: Into<String>, I: IntoIterator<Item = &'a str>> From<(S, I)>
-    for NativeCommand
+impl<S1: Into<String>, S2: Into<String>, I: IntoIterator<Item = S2>>
+    From<(S1, I)> for NativeCommand
 {
-    fn from((program, arguments): (S, I)) -> Self {
+    fn from((program, arguments): (S1, I)) -> Self {
         Self {
             program: program.into(),
-            arguments: arguments.into_iter().map(|s| s.to_owned()).collect(),
+            arguments: arguments.into_iter().map(S2::into).collect(),
         }
     }
 }
