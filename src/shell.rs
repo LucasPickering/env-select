@@ -103,13 +103,18 @@ impl Shell {
         }
     }
 
-    /// Execute a command in this shell, and return the stdout value.
-    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
+    /// Get a NativeCommand to execute the given command in this shell
+    pub fn get_shell_command(&self, command: &str) -> NativeCommand {
         // Use the full shell path if we have it. Otherwise, just pass the
         // shell name and hope it's in PATH
         let shell_executable =
             self.path.clone().unwrap_or_else(|| self.kind.to_string());
-        Self::execute_native((shell_executable, ["-c", command]))
+        (shell_executable, ["-c", command]).into()
+    }
+
+    /// Execute a command in this shell, and return the stdout value.
+    pub fn execute_shell(&self, command: &str) -> anyhow::Result<String> {
+        Self::execute_native(self.get_shell_command(command))
     }
 
     /// Execute a program with the given arguments, and return the stdout value.
