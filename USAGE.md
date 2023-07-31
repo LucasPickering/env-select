@@ -119,10 +119,10 @@ dev also-dev
 
 ```
 
-`--` is required to delineate the arguments handled by `es` from the command being executed. The executed command is called directly, _not_ executed in a shell. To access shell features in the executed command, you can explicitly run in a subshell:
+`--` is required to delineate the arguments handled by `es` from the command being executed. The executed command is called directly, _not_ executed in a shell. To access shell features in the executed command use `--run-in-shell` (or `-r`):
 
 ```sh
-> es run server dev -- sh -c 'echo $SERVICE1 | cat -'
+> es run -r server dev -- 'echo $SERVICE1 | cat -'
 dev
 ```
 
