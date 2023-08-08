@@ -12,15 +12,13 @@ use crate::{
     shell::{Shell, ShellKind},
 };
 use anyhow::{anyhow, Context};
-use atty::Stream;
 use clap::{Parser, Subcommand};
 use log::{error, info, LevelFilter};
 use std::{
-    iter,
+    fs,
+    path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
-
-const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
 /// A utility to select between predefined values or sets of environment
 /// variables.
@@ -30,6 +28,13 @@ struct Args {
     /// Subcommand to execute
     #[command(subcommand)]
     command: Commands,
+
+    /// File that env-select should write sourceable output to. Used only by
+    /// commands that intend to modify the parent environment. Shell wrappers
+    /// will pass a temporary path here. This needs to be a global arg because
+    /// the wrapper doesn't know what subcommand is being run.
+    #[clap(long, hide = true)]
+    source_file: Option<PathBuf>,
 
     /// Type of the shell binary in use. If omitted, it will be auto-detected
     /// from the $SHELL variable.
@@ -46,17 +51,6 @@ enum Commands {
     /// Configure the shell environment for env-select. Intended to be piped
     /// to `source` as part of your shell startup.
     Init,
-
-    /// Test the given env-select command to see if it's a `set` command. This
-    /// is only useful for the wrapping shell functions; it tells them if they
-    /// should attempt to source the output of the command. The given command
-    /// is *not* executed, just parsed by clap. Return exit code 0 if it's a
-    /// `set` command, 1 otherwise.
-    #[command(hide = true)]
-    Test {
-        #[arg(trailing_var_arg = true)]
-        command: Vec<String>,
-    },
 
     /// Run a command in an augmented environment, via a configured
     /// variable/application
@@ -186,21 +180,7 @@ impl Executor {
     /// Fallible main function
     fn run(self, args: Args) -> anyhow::Result<()> {
         match args.command {
-            Commands::Init => self.shell.print_init_script(),
-            Commands::Test { command } => {
-                // Attempt to parse the given command, and check if it's a `set`
-                match Args::try_parse_from(
-                    iter::once(BINARY_NAME)
-                        .chain(command.iter().map(String::as_str)),
-                ) {
-                    Ok(Args {
-                        command: Commands::Set { .. },
-                        ..
-                    }) => Ok(()),
-                    Ok(_) => Err(anyhow!("Not a `set` command: {command:?}")),
-                    Err(_) => Err(anyhow!("Invalid command: {command:?}")),
-                }
-            }
+            Commands::Init => self.print_init_script(),
             Commands::Run {
                 selection:
                     Selection {
@@ -221,8 +201,15 @@ impl Executor {
                         application,
                         profile,
                     },
-            } => self
-                .print_export_commands(application.as_ref(), profile.as_ref()),
+            } => self.write_export_commands(
+                application.as_ref(),
+                profile.as_ref(),
+                &args.source_file.ok_or_else(|| {
+                    anyhow!(
+                        "--source-file argument required for subcommand `set`"
+                    )
+                })?,
+            ),
             Commands::Show(ShowArgs { command }) => {
                 match command {
                     ShowSubcommand::Config => {
@@ -248,6 +235,16 @@ impl Executor {
             prompt_options(&self.config.applications, application_name)?;
         let profile = prompt_options(&application.profiles, profile_name)?;
         Environment::from_profile(&self.shell, profile)
+    }
+
+    /// Print the shell init script, which should be piped to `source`
+    fn print_init_script(&self) -> anyhow::Result<()> {
+        let script = self
+            .shell
+            .init_script()
+            .context("Error generating shell init script")?;
+        println!("{script}");
+        console::print_installation_hint()
     }
 
     /// Run a command in a sub-environment
@@ -286,26 +283,25 @@ impl Executor {
         }
     }
 
-    /// Print the export command, and if appropriate, tell the user about a
-    /// sick pro tip.
-    fn print_export_commands(
+    /// Write export commands to a file
+    fn write_export_commands(
         &self,
         application_name: Option<&Name>,
         profile_name: Option<&Name>,
+        source_file: &Path,
     ) -> anyhow::Result<()> {
         let environment =
             self.load_environment(application_name, profile_name)?;
 
-        self.shell.print_export(&environment);
+        let source_output = self.shell.export(&environment);
+        fs::write(source_file, source_output).with_context(|| {
+            format!("Error writing sourceable output to file {source_file:?}")
+        })?;
 
-        // Tell the user what we exported, on stderr so it doesn't interfere
-        // with shell piping.
-        if atty::isnt(Stream::Stdout) {
-            eprintln!("The following variables will be set:");
-            eprint!("{environment}");
-        }
+        // Tell the user what we exported
+        println!("The following variables will be set:");
+        print!("{environment}");
 
-        console::print_installation_hint()?;
         Ok(())
     }
 }
