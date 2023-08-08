@@ -1,18 +1,19 @@
-use crate::{config::NativeCommand, console, environment::Environment};
+use crate::{config::NativeCommand, environment::Environment};
 use anyhow::{anyhow, bail, Context};
 use clap::ValueEnum;
 use log::{debug, info};
 use std::{
     env,
     ffi::OsStr,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Display, Formatter, Write},
     path::PathBuf,
     process::{Command, Stdio},
 };
 
+/// In each wrapper, this key will be replaced by the path to env-select
 const BINARY_REPLACEMENT_KEY: &str = "ENV_SELECT_BINARY";
-const BASH_WRAPPER: &str = include_str!("../shells/es.bash");
-const ZSH_WRAPPER: &str = include_str!("../shells/es.zsh");
+const BASH_WRAPPER: &str = include_str!("../shells/es.sh");
+const ZSH_WRAPPER: &str = include_str!("../shells/es.sh");
 const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 
 /// A pointer to a specific shell binary. This struct also encapsulates general
@@ -60,9 +61,10 @@ impl Shell {
         Self { path: None, kind }
     }
 
-    /// Print a valid shell script that will initialize the `es` wrapper as
-    /// well as whatever other initialization is needed.
-    pub fn print_init_script(&self) -> anyhow::Result<()> {
+    /// Get a valid shell script that will initialize the `es` wrapper as well
+    /// as whatever other initialization is needed. The script should be piped
+    /// to `source`.
+    pub fn init_script(&self) -> anyhow::Result<String> {
         let wrapper_template = match self.kind {
             ShellKind::Bash => BASH_WRAPPER,
             ShellKind::Zsh => ZSH_WRAPPER,
@@ -71,22 +73,17 @@ impl Shell {
 
         // Inject the path of the current binary into the script. This prevents
         // any need to modify PATH
-        let wrapper_src = wrapper_template.replace(
+        Ok(wrapper_template.replace(
             BINARY_REPLACEMENT_KEY,
             &env::current_exe()?.display().to_string(),
-        );
-
-        println!("{wrapper_src}");
-
-        console::print_installation_hint()?;
-
-        Ok(())
+        ))
     }
 
-    /// Print the shell command(s) that will configure the environment to a
+    /// Get the shell command(s) that will configure the environment to a
     /// particular set of key=value pairs for this shell type. This command
     /// can later be piped to the source command to apply it.
-    pub fn print_export(&self, environment: &Environment) {
+    pub fn export(&self, environment: &Environment) -> String {
+        let mut output = String::new();
         for (variable, value) in environment.iter_unmasked() {
             // Generate a shell command to export the variable
             match self.kind {
@@ -94,13 +91,16 @@ impl Shell {
                 // vulnerabilities.
                 // TODO escape inner single quotes
                 ShellKind::Bash | ShellKind::Zsh => {
-                    println!("export '{variable}'='{value}'")
+                    writeln!(output, "export '{variable}'='{value}'")
+                        .expect("string writing is infallible");
                 }
                 ShellKind::Fish => {
-                    println!("set -gx '{variable}' '{value}'")
+                    writeln!(output, "set -gx '{variable}' '{value}'")
+                        .expect("string writing is infallible");
                 }
             }
         }
+        output
     }
 
     /// Get a NativeCommand to execute the given command in this shell

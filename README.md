@@ -62,7 +62,7 @@ cargo install env-select
 
 ### Configure Your Shell
 
-**This may not be necessary, depending on what shell you use and how you installed env-select.** The easiest way to check is to open a new shell and run `es help`.
+**This may not be necessary, depending on what shell you use and how you installed env-select.** The easiest way to check is to open a new shell and run `es help`. If it succeeds, you're good to go. If not, read on.
 
 Because env-select modifies your shell environment, it requires a wrapper function defined in the shell that can call the `env-select` binary and automatically apply its output.
 

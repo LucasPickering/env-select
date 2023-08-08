@@ -14,7 +14,7 @@ fn test_subcommand_set(
 ) {
     execute_script(
         "
-        es set integration-tests p1
+        es set integration-tests p1 > /dev/null
         echo -n \
             $VARIABLE1 \
             $VARIABLE2 \

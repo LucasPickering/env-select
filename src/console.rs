@@ -45,10 +45,8 @@ pub fn prompt_options<'a, T: Prompt>(
     }
 }
 
-/// Print the given message, but only if we're connected to a TTY. Normally we
-/// avoid printing anything to stdout to avoid conflict with shell commands, but
-/// if we're on a TTY, we know the output isn't being piped so it's safe to
-/// print here.
+/// Print the given message, but only if we're connected to a TTY. If not on a
+/// TTY, this hint isn't relevant so hide it.
 pub fn print_hint(message: &str) -> anyhow::Result<()> {
     if atty::is(Stream::Stdout) {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -69,6 +67,7 @@ pub fn print_installation_hint() -> anyhow::Result<()> {
     ))
 }
 
+/// Little helper to define how a type should be rendered in a TUI prompt
 pub trait Prompt: Sized {
     const SELF_NAME: &'static str;
 
