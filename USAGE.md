@@ -411,12 +411,14 @@ The `dev` profile excludes the `DB_PASSWORD` variable. Beware though, whenever s
 
 ### Cascading configs
 
-On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, with **lower config files having higher precedence**. For example, if we execute `es set SERVICE1` in `~/code/`:
+On every execution, env-select will scan the current directory for a file called `.env-select.toml` and parse it for a config. In addition to that, it will walk up the directory tree and check each ancestor directory tree for the same file. If multiple files are found, the results will be merged together, **down to the profile level only**. Lower config files having higher precedence. For example, if we execute `es set SERVICE1` in `~/code/`:
 
 ```toml
 # ~/code/.env-select.toml
 [applications.server.profiles.dev]
 variables = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
+[applications.server.profiles.stg]
+variables = {SERVICE1 = "secret-stg-server", SERVICE2 = "another-secret-stg-server"}
 ```
 
 ```toml
@@ -431,12 +433,16 @@ then our resulting config, at execution time, will look like:
 
 ```toml
 # Note: this config never exists in the file system, only in memory during program execution
+
 # From ~/code/.env-select.toml (higher precedence)
 [applications.server.profiles.dev]
-variables = {SERVICE1 = "secret-dev-server", SERVICE2 = "another-secret-dev-server"}
-# From ~/.env-select.toml (no value in ~/code/.env-select.toml)
+variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 [applications.server.profiles.prd]
 variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
+
+# From ~/.env-select.toml (no value in ~/code/.env-select.toml)
+[applications.server.profiles.stg]
+variables = {SERVICE1 = "secret-stg-server", SERVICE2 = "another-secret-stg-server"}
 ```
 
 To see where env-select is loading configs from, and how they are being merged together, run the command with the `--verbose` (or `-v`) flag.
