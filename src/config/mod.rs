@@ -5,7 +5,6 @@ mod qualify;
 #[cfg(test)]
 mod tests;
 
-use crate::config::merge::Merge;
 use anyhow::{anyhow, bail, Context};
 use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, info, trace};
@@ -190,6 +189,7 @@ impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let mut config = Config::default();
 
+        // Iterate bottom-up, so the first file has priority
         for path in Self::get_all_files()?.iter() {
             debug!("Loading config from file {path:?}");
             let content = fs::read_to_string(path)
@@ -199,7 +199,7 @@ impl Config {
                     debug!("Loaded from file {path:?}: {parsed:?}");
                     // Qualify relative paths to be absolute
                     parsed.qualify(path);
-                    config.merge(parsed);
+                    config.merge(parsed, path);
                 }
                 Err(error) => {
                     error!("{path:?} will be ignored due to error: {error}")
@@ -298,6 +298,15 @@ impl FromStr for ProfileReference {
                 application: Some(application.parse()?),
                 profile: profile.parse()?,
             }),
+        }
+    }
+}
+
+impl From<(Name, Name)> for ProfileReference {
+    fn from((application, profile): (Name, Name)) -> Self {
+        Self {
+            application: Some(application),
+            profile,
         }
     }
 }
