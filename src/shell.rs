@@ -1,6 +1,9 @@
-use crate::{environment::Environment, execute::Executable};
+use crate::{
+    config::ShellCommand, environment::Environment, execute::Executable,
+};
 use anyhow::anyhow;
 use clap::ValueEnum;
+use derive_more::Display;
 use log::{debug, info};
 use std::{
     env,
@@ -27,11 +30,15 @@ pub struct Shell {
     pub path: Option<String>,
 }
 
-/// A supported kind of shell
-#[derive(Copy, Clone, Debug, ValueEnum)]
+/// A supported kind of shell. The display implementation here defines the
+/// binary name that we'll use to invoke it
+#[derive(Copy, Clone, Debug, Display, ValueEnum)]
 pub enum ShellKind {
+    #[display(fmt = "bash")]
     Bash,
+    #[display(fmt = "zsh")]
     Zsh,
+    #[display(fmt = "fish")]
     Fish,
 }
 
@@ -103,7 +110,7 @@ impl Shell {
     }
 
     /// Get an [Executable] command to run in this shell
-    pub fn executable(&self, command: &str) -> Executable {
+    pub fn executable(&self, command: &ShellCommand) -> Executable {
         // Use the full shell path if we have it. Otherwise, just pass
         // the shell name and hope it's in PATH
         let shell_program =
@@ -116,17 +123,7 @@ impl Display for Shell {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.path {
             Some(path) => write!(f, "{} (from $SHELL)", path),
-            None => write!(f, "{} (assumed to be in $PATH)", self.kind),
-        }
-    }
-}
-
-impl Display for ShellKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Bash => write!(f, "bash"),
-            Self::Zsh => write!(f, "zsh"),
-            Self::Fish => write!(f, "fish"),
+            None => write!(f, "{} (from $PATH)", self.kind),
         }
     }
 }

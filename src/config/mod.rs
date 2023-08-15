@@ -6,6 +6,7 @@ mod qualify;
 mod tests;
 
 use anyhow::{anyhow, bail, Context};
+use derive_more::{Deref, Display, From};
 use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,7 @@ pub struct Application {
 
 /// An application or profile name. Newtype allows us to apply validation during
 /// deserialization.
-#[derive(Clone, Debug, Default, Serialize, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Display, Serialize, Hash, Eq, PartialEq)]
 pub struct Name(String);
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
@@ -128,7 +129,7 @@ pub enum ValueSourceKind {
     /// A command that will be executed via the shell. Allows access to
     /// aliases, pipes, etc.
     #[serde(rename = "shell")]
-    ShellCommand { command: String },
+    ShellCommand { command: ShellCommand },
 
     /// Run a command in a kubernetes pod.
     #[serde(rename = "kubernetes")]
@@ -168,7 +169,7 @@ pub struct SideEffect {
 #[serde(untagged)]
 pub enum SideEffectCommand {
     Native(NativeCommand),
-    Shell(String),
+    Shell(ShellCommand),
 }
 
 /// A native command is a program name/path, with zero or more arguments. This
@@ -181,6 +182,23 @@ pub struct NativeCommand {
     /// Arguments (if any) to pass to the program
     pub arguments: Vec<String>,
 }
+
+/// A shell command is just a string, which will be parsed by the shell
+
+#[derive(
+    Clone,
+    Debug,
+    Display,
+    Deref,
+    Eq,
+    From,
+    Hash,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
+#[display(fmt = "`{}`", "0")]
+pub struct ShellCommand(String);
 
 impl Config {
     /// Load config from the current directory and all parents. Any config
@@ -237,12 +255,6 @@ impl Config {
         // Return top->bottom results
         config_files.reverse();
         Ok(config_files)
-    }
-}
-
-impl Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -353,7 +365,7 @@ impl Display for ValueSource {
                 write!(f, "{command} (native)")
             }
             ValueSourceKind::ShellCommand { command } => {
-                write!(f, "`{command}` (shell)")
+                write!(f, "{command} (shell)")
             }
             ValueSourceKind::KubernetesCommand {
                 command,
@@ -393,6 +405,12 @@ impl From<NativeCommand> for Vec<String> {
         let mut elements = value.arguments;
         elements.insert(0, value.program); // O(n)! Spooky!
         elements
+    }
+}
+
+impl From<&str> for ShellCommand {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
     }
 }
 
