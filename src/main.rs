@@ -280,7 +280,7 @@ impl Executor {
 
         let mut executable: Executable = if run_in_shell {
             // Undo the tokenization from clap
-            self.shell.executable(&command.join(" "))
+            self.shell.executable(&command.join(" ").into())
         } else {
             // This *shouldn't* fail because we marked the argument as required,
             // meaning clap will reject an empty command

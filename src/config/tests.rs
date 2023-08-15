@@ -174,7 +174,7 @@ pub fn native<const N: usize>(
 /// Helper to create a shell command
 pub fn shell(command: &str) -> ValueSource {
     ValueSourceKind::ShellCommand {
-        command: command.to_owned(),
+        command: command.into(),
     }
     .into()
 }
@@ -434,18 +434,21 @@ fn test_parse_side_effects() {
                 name: "SideEffect",
                 len: 2,
             },
+            //
             Token::Str("setup"),
             Token::Some,
             Token::Seq { len: Some(2) },
             Token::Str("echo"),
             Token::Str("setup"),
             Token::SeqEnd,
+            //
             Token::Str("teardown"),
             Token::Some,
             Token::Seq { len: Some(2) },
             Token::Str("echo"),
             Token::Str("teardown"),
             Token::SeqEnd,
+            //
             Token::StructEnd,
         ],
     );
@@ -458,12 +461,21 @@ fn test_parse_side_effects() {
                 name: "SideEffect",
                 len: 2,
             },
+            //
             Token::Str("setup"),
             Token::Some,
+            Token::NewtypeStruct {
+                name: "ShellCommand",
+            },
             Token::Str("echo setup"),
+            //
             Token::Str("teardown"),
             Token::Some,
+            Token::NewtypeStruct {
+                name: "ShellCommand",
+            },
             Token::Str("echo teardown"),
+            //
             Token::StructEnd,
         ],
     );
@@ -516,6 +528,9 @@ fn test_parse_shell_command() {
             Token::Str("type"),
             Token::Str("shell"),
             Token::Str("command"),
+            Token::NewtypeStruct {
+                name: "ShellCommand",
+            },
             Token::Str("echo test"),
             Token::StructEnd,
         ],
