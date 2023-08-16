@@ -13,10 +13,10 @@ use std::{
 
 /// Container of VARIABLE=value mappings. This handles resolving value sources
 /// into values, including processing multi-value outputs.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Environment(IndexMap<String, ResolvedValue>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ResolvedValue {
     value: String,
     sensitive: bool,
@@ -49,13 +49,16 @@ impl Environment {
     }
 
     /// Get a string for a Value. This may involve external communication, e.g.
-    /// running a shell command
+    /// running a shell command. Resolved value(s) will be inserted into the
+    /// environment.
     fn resolve_variable(
         &mut self,
         shell: &Shell,
         variable: String,
         ValueSource(value_source): ValueSource,
     ) -> anyhow::Result<()> {
+        // Resolve the string value, which could be treated as one value or a
+        // mapping of multiple down below
         let raw_value = match value_source.kind {
             ValueSourceKind::Literal { value } => value,
             ValueSourceKind::File { path } => fs::read_to_string(&path)
@@ -99,25 +102,24 @@ impl Environment {
                 })?;
 
             for (variable, value) in mapping {
-                self.0.insert(
-                    variable,
-                    ResolvedValue {
-                        value,
-                        sensitive: value_source.sensitive,
-                    },
-                );
+                self.insert(variable, value, value_source.sensitive);
             }
         } else {
-            self.0.insert(
-                variable,
-                ResolvedValue {
-                    value: raw_value,
-                    sensitive: value_source.sensitive,
-                },
-            );
+            self.insert(variable, raw_value, value_source.sensitive);
         }
 
         Ok(())
+    }
+
+    /// Insert a variable=value mapping into the environment
+    fn insert(&mut self, variable: String, value: String, sensitive: bool) {
+        // If the variable is PATH, add to it instead of overidding
+        let value = if Shell::is_path_variable(&variable) {
+            Shell::prepend_path(value)
+        } else {
+            value
+        };
+        self.0.insert(variable, ResolvedValue { value, sensitive });
     }
 }
 
@@ -138,5 +140,67 @@ impl Display for ResolvedValue {
         } else {
             write!(f, "{}", self.value)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::ValueSourceInner,
+        shell::ShellKind,
+        test_util::{all_shells, literal, map},
+    };
+    use rstest::rstest;
+    use rstest_reuse::apply;
+    use std::env;
+
+    #[apply(all_shells)]
+    fn test_path_variable(shell_kind: ShellKind) {
+        let base_path = "/bin:/usr/bin";
+        let expected = Environment(map([(
+            "PATH",
+            ResolvedValue {
+                value: format!("~/.bin:{base_path}"),
+                sensitive: false,
+            },
+        )]));
+        // Override PATH so we get consistent results
+        env::set_var("PATH", base_path);
+
+        // Set PATH as a single variable
+        assert_eq!(
+            Environment::from_profile(
+                &shell_kind.into(),
+                &Profile {
+                    variables: map([("PATH", literal("~/.bin"))]),
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
+            expected
+        );
+
+        // Set PATH as a multi-variable mapping
+        assert_eq!(
+            Environment::from_profile(
+                &shell_kind.into(),
+                &Profile {
+                    variables: map([(
+                        "_",
+                        ValueSource(ValueSourceInner {
+                            kind: ValueSourceKind::Literal {
+                                value: "PATH=~/.bin".into()
+                            },
+                            multiple: true,
+                            sensitive: false,
+                        })
+                    )]),
+                    ..Default::default()
+                }
+            )
+            .unwrap(),
+            expected
+        );
     }
 }

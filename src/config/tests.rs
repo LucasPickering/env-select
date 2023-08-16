@@ -2,8 +2,10 @@
 //! Module-specific tests are in their own files.
 
 use super::*;
-use crate::config::{Application, Config, Profile, ValueSourceKind};
-use indexmap::{IndexMap, IndexSet};
+use crate::{
+    config::{Config, Profile, ValueSourceKind},
+    test_util::{config, literal, map, native, set, shell, side_effect},
+};
 use pretty_assertions::assert_eq;
 use serde_test::{
     assert_de_tokens, assert_de_tokens_error, assert_tokens, Token,
@@ -50,145 +52,6 @@ SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive
 
 [applications.empty]
 "#;
-
-impl From<&str> for Name {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-impl From<&str> for ProfileReference {
-    fn from(value: &str) -> Self {
-        value.parse().expect("Invalid profile reference")
-    }
-}
-
-impl From<ValueSourceKind> for ValueSource {
-    fn from(kind: ValueSourceKind) -> Self {
-        Self(ValueSourceInner {
-            kind,
-            sensitive: false,
-            multiple: false,
-        })
-    }
-}
-
-/// Shorthand for creating a native side effect
-impl<const N: usize> From<[&str; N]> for SideEffectCommand {
-    fn from(value: [&str; N]) -> Self {
-        Self::Native(
-            value
-                .into_iter()
-                .map(String::from)
-                .collect::<Vec<String>>()
-                .try_into()
-                .unwrap(),
-        )
-    }
-}
-
-/// Shorthand for creating a shell side effect
-impl From<&str> for SideEffectCommand {
-    fn from(value: &str) -> Self {
-        Self::Shell(value.into())
-    }
-}
-
-// Builder-like functions to make it easy to create value sources
-impl ValueSource {
-    fn sensitive(mut self, sensitive: bool) -> Self {
-        self.0.sensitive = sensitive;
-        self
-    }
-
-    fn multiple(mut self, multiple: bool) -> Self {
-        self.0.multiple = multiple;
-        self
-    }
-}
-
-/// Helper to create a full config, from a mapping of applications and profiles
-pub fn config(applications: Vec<(&str, Vec<(&str, Profile)>)>) -> Config {
-    Config {
-        applications: applications
-            .into_iter()
-            .map(|(name, profiles)| {
-                (
-                    (*name).into(),
-                    Application {
-                        profiles: profiles
-                            .into_iter()
-                            .map(|(name, profile)| ((*name).into(), profile))
-                            .collect(),
-                    },
-                )
-            })
-            .collect(),
-    }
-}
-
-/// Helper for building an IndexMap
-pub fn map<'a, K: Eq + Hash + PartialEq + From<&'a str>, V, const N: usize>(
-    items: [(&'a str, V); N],
-) -> IndexMap<K, V> {
-    items.into_iter().map(|(k, v)| (k.into(), v)).collect()
-}
-
-/// Helper for building an IndexSet
-pub fn set<'a, V: From<&'a str> + Hash + Eq, const N: usize>(
-    items: [&'a str; N],
-) -> IndexSet<V> {
-    items.into_iter().map(V::from).collect()
-}
-
-/// Helper to create a non-sensitive literal
-pub fn literal(value: &str) -> ValueSource {
-    ValueSourceKind::Literal {
-        value: value.to_owned(),
-    }
-    .into()
-}
-
-/// Helper to create a file value source
-pub fn file(path: impl AsRef<Path>) -> ValueSource {
-    ValueSourceKind::File {
-        path: path.as_ref().to_owned(),
-    }
-    .into()
-}
-
-/// Helper to create a native command
-pub fn native<const N: usize>(
-    program: &str,
-    arguments: [&str; N],
-) -> ValueSource {
-    ValueSourceKind::NativeCommand {
-        command: NativeCommand {
-            program: program.into(),
-            arguments: arguments.into_iter().map(String::from).collect(),
-        },
-    }
-    .into()
-}
-
-/// Helper to create a shell command
-pub fn shell(command: &str) -> ValueSource {
-    ValueSourceKind::ShellCommand {
-        command: command.into(),
-    }
-    .into()
-}
-
-/// Create a side effect from (setup, teardown)
-pub fn side_effect<S: Into<SideEffectCommand>, T: Into<SideEffectCommand>>(
-    setup: S,
-    teardown: T,
-) -> SideEffect {
-    SideEffect {
-        setup: Some(setup.into()),
-        teardown: Some(teardown.into()),
-    }
-}
 
 /// General catch-all test
 #[test]
@@ -260,7 +123,7 @@ fn test_parse_config() {
                             (
                                 "multiple",
                                 literal("MULTI1=multi1\nMULTI2=multi2")
-                                    .multiple(true),
+                                    .multiple(),
                             ),
                         ]),
                     },
@@ -272,15 +135,15 @@ fn test_parse_config() {
                         pre_export: vec![],
                         post_export: vec![],
                         variables: map([
-                            ("SERVICE1", literal("secret").sensitive(true)),
+                            ("SERVICE1", literal("secret").sensitive()),
                             (
                                 "SERVICE2",
-                                native("echo", ["also-secret"]).sensitive(true),
+                                native("echo", ["also-secret"]).sensitive(),
                             ),
                             (
                                 "SERVICE3",
                                 shell("echo secret_password | base64")
-                                    .sensitive(true),
+                                    .sensitive(),
                             ),
                         ]),
                     },
@@ -375,7 +238,7 @@ fn test_parse_profile_reference() {
 #[test]
 fn test_parse_value_source() {
     assert_tokens(
-        &literal("abc").multiple(true).sensitive(true).0,
+        &literal("abc").multiple().sensitive().0,
         &[
             Token::Map { len: None },
             Token::Str("type"),

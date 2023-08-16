@@ -3,6 +3,8 @@ mod console;
 mod environment;
 mod error;
 mod execute;
+#[cfg(test)]
+mod test_util;
 
 mod shell;
 
@@ -17,6 +19,10 @@ use crate::{
 use anyhow::{anyhow, Context};
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
+// https://github.com/la10736/rstest/tree/master/rstest_reuse#cavelets
+#[cfg(test)]
+#[allow(clippy::single_component_path_imports)]
+use rstest_reuse;
 use std::{
     fs,
     path::{Path, PathBuf},

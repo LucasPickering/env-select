@@ -9,7 +9,7 @@ pub fn env_select() -> Command {
     command
 }
 
-/// Fixture to run test with all shells
+/// Test template to run test with all shells
 #[template]
 #[rstest]
 pub fn all_shells(#[values("bash", "zsh", "fish")] shell_kind: &str) {}
