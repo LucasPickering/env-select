@@ -46,7 +46,7 @@ pub struct Application {
 /// An application or profile name. Newtype allows us to apply validation during
 /// deserialization.
 #[derive(Clone, Debug, Default, Display, Serialize, Hash, Eq, PartialEq)]
-pub struct Name(String);
+pub struct Name(pub String);
 
 /// A profile is a set of fixed variable mappings, i.e. each variable maps to
 /// a singular value.
@@ -159,8 +159,8 @@ pub enum ValueSourceKind {
 /// both.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub struct SideEffect {
-    setup: Option<SideEffectCommand>,
-    teardown: Option<SideEffectCommand>,
+    pub setup: Option<SideEffectCommand>,
+    pub teardown: Option<SideEffectCommand>,
 }
 
 /// A single imperative command to run as part of a side effect. Could be either

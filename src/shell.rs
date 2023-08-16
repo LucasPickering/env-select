@@ -12,14 +12,16 @@ use std::{
     path::PathBuf,
 };
 
+/// https://en.wikipedia.org/wiki/PATH_(variable)
+const PATH_VARIABLE: &str = "PATH";
+
 /// In each wrapper, this key will be replaced by the path to env-select
 const BINARY_REPLACEMENT_KEY: &str = "ENV_SELECT_BINARY";
 const BASH_WRAPPER: &str = include_str!("../shells/es.sh");
 const ZSH_WRAPPER: &str = include_str!("../shells/es.sh");
 const FISH_WRAPPER: &str = include_str!("../shells/es.fish");
 
-/// A pointer to a specific shell binary. This struct also encapsulates general
-/// functionality around executing commands.
+/// A pointer to a specific type of shell
 #[derive(Clone, Debug)]
 pub struct Shell {
     pub kind: ShellKind,
@@ -65,6 +67,22 @@ impl Shell {
     /// hope it's in PATH if we ever need to execute it.
     pub fn from_kind(kind: ShellKind) -> Self {
         Self { path: None, kind }
+    }
+
+    /// Is the given variable the PATH variable? PATH gets special functionality
+    /// to prepend instead of replacing
+    pub fn is_path_variable(variable: &str) -> bool {
+        variable == PATH_VARIABLE
+    }
+
+    /// Add a new directory to the *beginning* of the PATH variable. This will
+    /// give the new directory priority over all others. It stands to reason
+    /// that if a user is adding a directory specifically for one environment,
+    /// they would want it to override any potential duplicates.
+    pub fn prepend_path(new_path: String) -> String {
+        env::var(PATH_VARIABLE)
+            .map(|full_path| format!("{new_path}:{full_path}"))
+            .unwrap_or(new_path)
     }
 
     /// Get a valid shell script that will initialize the `es` wrapper as well
@@ -125,5 +143,11 @@ impl Display for Shell {
             Some(path) => write!(f, "{} (from $SHELL)", path),
             None => write!(f, "{} (from $PATH)", self.kind),
         }
+    }
+}
+
+impl From<ShellKind> for Shell {
+    fn from(kind: ShellKind) -> Self {
+        Self::from_kind(kind)
     }
 }

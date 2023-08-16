@@ -63,9 +63,9 @@ fn merge_map<K: Clone + Eq + Hash, V>(
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{
-        tests::{config, literal, map, set},
-        Profile,
+    use crate::{
+        config::Profile,
+        test_util::{config, literal, map, set},
     };
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;

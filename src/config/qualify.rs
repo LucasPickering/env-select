@@ -123,9 +123,9 @@ impl<'a> Qualify<'a> for PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{
-        tests::{config, file, map, set},
-        Profile,
+    use crate::{
+        config::Profile,
+        test_util::{config, file, map, set},
     };
     use pretty_assertions::assert_eq;
 

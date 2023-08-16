@@ -260,6 +260,22 @@ command = ["sh", "-c", "printenv | grep -E '^(DB_USER|DB_PASSWORD)='"]
 multiple = true
 ```
 
+### PATH Variable
+
+If you want to modify the PATH variable, typically you just want to add to it, rather than replace it. Env-select will do this automatically, if the variable has the name `PATH`.
+
+```toml
+[applications.server.profiles.dev.variables]
+PATH = "~/.bin"
+```
+
+```sh
+> echo $PATH
+/bin:/usr/bin
+> es run server dev -- printenv PATH
+~/.bin:/bin:/usr/bin
+```
+
 ### Side Effects
 
 Side effects allow you to configure your environment beyond simple environment variables, using imperative commands. Each side effects has two commands: setup and teardown. Additionally, there are two points at which side effects can execute: pre-export (before environment variables are exported) and post-export (with environment variables available). So there are four side effect stages in total (in their order of execution):

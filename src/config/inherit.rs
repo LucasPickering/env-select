@@ -180,9 +180,9 @@ fn display_cycle<T: Display>(nodes: &IndexSet<T>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{
-        tests::{config, literal, map, set, side_effect},
-        Profile,
+    use crate::{
+        config::Profile,
+        test_util::{config, literal, map, set, side_effect},
     };
     use pretty_assertions::assert_eq;
 
