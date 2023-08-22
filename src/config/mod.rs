@@ -120,22 +120,15 @@ pub enum ValueSourceKind {
         path: PathBuf,
     },
 
-    /// A native command (program+arguments) that will be executed at runtime
-    /// to get the variable's value. Useful for values that change, secrets,
-    /// etc.
+    /// A command that will be executed via the shell
     #[serde(rename = "command")]
-    NativeCommand { command: NativeCommand },
-
-    /// A command that will be executed via the shell. Allows access to
-    /// aliases, pipes, etc.
-    #[serde(rename = "shell")]
-    ShellCommand { command: ShellCommand },
+    Command { command: ShellCommand },
 
     /// Run a command in a kubernetes pod.
     #[serde(rename = "kubernetes")]
     KubernetesCommand {
         /// Command to execute in the pod
-        command: NativeCommand,
+        command: Vec<String>,
         /// Label query used to find the pod
         /// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
         pod_selector: String,
@@ -159,32 +152,11 @@ pub enum ValueSourceKind {
 /// both.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub struct SideEffect {
-    pub setup: Option<SideEffectCommand>,
-    pub teardown: Option<SideEffectCommand>,
-}
-
-/// A single imperative command to run as part of a side effect. Could be either
-/// the setup or the teardown.
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(untagged)]
-pub enum SideEffectCommand {
-    Native(NativeCommand),
-    Shell(ShellCommand),
-}
-
-/// A native command is a program name/path, with zero or more arguments. This
-/// is a separate type so we can easily serialize into/out of `Vec<String>`.
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(try_from = "Vec<String>", into = "Vec<String>")]
-pub struct NativeCommand {
-    /// Name (or path) of program to execute
-    pub program: String,
-    /// Arguments (if any) to pass to the program
-    pub arguments: Vec<String>,
+    pub setup: Option<ShellCommand>,
+    pub teardown: Option<ShellCommand>,
 }
 
 /// A shell command is just a string, which will be parsed by the shell
-
 #[derive(
     Clone,
     Debug,
@@ -347,11 +319,11 @@ impl ValueSource {
 }
 
 impl SideEffect {
-    pub fn setup(&self) -> Option<&SideEffectCommand> {
+    pub fn setup(&self) -> Option<&ShellCommand> {
         self.setup.as_ref()
     }
 
-    pub fn teardown(&self) -> Option<&SideEffectCommand> {
+    pub fn teardown(&self) -> Option<&ShellCommand> {
         self.teardown.as_ref()
     }
 }
@@ -361,11 +333,8 @@ impl Display for ValueSource {
         match &self.0.kind {
             ValueSourceKind::Literal { value } => write!(f, "\"{value}\""),
             ValueSourceKind::File { path } => write!(f, "{}", path.display()),
-            ValueSourceKind::NativeCommand { command } => {
-                write!(f, "{command} (native)")
-            }
-            ValueSourceKind::ShellCommand { command } => {
-                write!(f, "{command} (shell)")
+            ValueSourceKind::Command { command } => {
+                write!(f, "{command}")
             }
             ValueSourceKind::KubernetesCommand {
                 command,
@@ -375,7 +344,7 @@ impl Display for ValueSource {
             } => {
                 write!(
                     f,
-                    "{command} (kubernetes {}[{pod_selector}]",
+                    "{command:?} (kubernetes {}[{pod_selector}]",
                     namespace.as_deref().unwrap_or("<current namespace>")
                 )?;
                 if let Some(container) = container {
@@ -384,48 +353,6 @@ impl Display for ValueSource {
                 write!(f, ")")?;
                 Ok(())
             }
-        }
-    }
-}
-
-impl Display for NativeCommand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`{}", self.program)?;
-        for argument in &self.arguments {
-            write!(f, " \"{argument}\"")?;
-        }
-        write!(f, "`")?;
-        Ok(())
-    }
-}
-
-// For serialization
-impl From<NativeCommand> for Vec<String> {
-    fn from(value: NativeCommand) -> Self {
-        let mut elements = value.arguments;
-        elements.insert(0, value.program); // O(n)! Spooky!
-        elements
-    }
-}
-
-impl From<&str> for ShellCommand {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-// For deserialization
-impl TryFrom<Vec<String>> for NativeCommand {
-    type Error = anyhow::Error;
-
-    fn try_from(mut value: Vec<String>) -> Result<Self, Self::Error> {
-        if !value.is_empty() {
-            Ok(Self {
-                program: value.remove(0),
-                arguments: value,
-            })
-        } else {
-            Err(anyhow!("Command array must have at least one element"))
         }
     }
 }

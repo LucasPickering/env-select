@@ -61,20 +61,15 @@ enum Commands {
     /// to `source` as part of your shell startup.
     Init,
 
-    /// Run a command in an augmented environment, via a configured
+    /// Run a shell command in an augmented environment, via a configured
     /// variable/application
     Run {
         #[command(flatten)]
         selection: Selection,
 
-        /// Command to execute, as <PROGRAM> [ARGUMENTS]...
+        /// Shell command to execute
         #[arg(required = true, last = true)]
         command: Vec<String>,
-
-        /// Invoke the command through the shell, rather than directly. Enables
-        /// using aliases, pipes, etc.
-        #[clap(short, long)]
-        run_in_shell: bool,
     },
 
     /// Modify shell environment via a configured variable/application
@@ -198,12 +193,10 @@ impl Executor {
                         profile,
                     },
                 command,
-                run_in_shell,
             } => self.run_command(
                 command,
                 application.as_ref(),
                 profile.as_ref(),
-                run_in_shell,
             ),
             Commands::Set {
                 selection:
@@ -279,19 +272,13 @@ impl Executor {
         command: Vec<String>,
         application_name: Option<&Name>,
         profile_name: Option<&Name>,
-        run_in_shell: bool,
     ) -> anyhow::Result<()> {
         let profile = self.select_profile(application_name, profile_name)?;
         let environment = self.load_environment(profile)?;
 
-        let mut executable: Executable = if run_in_shell {
-            // Undo the tokenization from clap
-            self.shell.executable(&command.join(" ").into())
-        } else {
-            // This *shouldn't* fail because we marked the argument as required,
-            // meaning clap will reject an empty command
-            command.try_into()?
-        };
+        // Undo clap's tokenization
+        let mut executable: Executable =
+            self.shell.executable(&command.join(" ").into());
 
         // Execute the command
         let status = executable.environment(&environment).status()?;
@@ -331,7 +318,7 @@ impl Executor {
 
         // Tell the user what we exported
         println!("The following variables will be set:");
-        print!("{environment}");
+        println!("{environment:#}");
 
         Ok(())
     }

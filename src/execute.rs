@@ -1,5 +1,5 @@
 use crate::{
-    config::{NativeCommand, SideEffect, SideEffectCommand},
+    config::{ShellCommand, SideEffect},
     environment::Environment,
     shell::Shell,
 };
@@ -17,13 +17,13 @@ use std::{
 ///
 /// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 pub fn execute_kubernetes(
-    command: &NativeCommand,
+    command: &[String],
     pod_selector: &str,
     namespace: Option<&str>,
     container: Option<&str>,
 ) -> anyhow::Result<String> {
     info!(
-        "Executing {command} in kubernetes namespace={}, \
+        "Executing {command:?} in kubernetes namespace={}, \
             pod_selector={}, container={}",
         namespace.unwrap_or_default(),
         pod_selector,
@@ -72,8 +72,8 @@ pub fn execute_kubernetes(
         kexec_arguments.extend(["-c", container]);
     }
     // Add the actual command
-    kexec_arguments.extend(["--", &command.program]);
-    kexec_arguments.extend(command.arguments.iter().map(String::as_str));
+    kexec_arguments.push("--");
+    kexec_arguments.extend(command.iter().map(String::as_str));
     ("kubectl", kexec_arguments).executable().check_output()
 }
 
@@ -106,73 +106,62 @@ pub fn revert_side_effects(
 
 /// Helper for executing a list of side effect commands
 fn execute_side_effects<'a>(
-    commands: impl Iterator<Item = &'a SideEffectCommand>,
+    commands: impl Iterator<Item = &'a ShellCommand>,
     shell: &Shell,
     environment: &Environment,
 ) -> anyhow::Result<()> {
     for command in commands {
-        let mut executable: Executable = match &command {
-            SideEffectCommand::Native(command) => command.clone().into(),
-            SideEffectCommand::Shell(command) => shell.executable(command),
-        };
-        executable.environment(environment).status()?;
+        shell
+            .executable(command)
+            .environment(environment)
+            .status()?;
     }
     Ok(())
 }
 
 /// A wrapper around the std Command type, which provides some more ergnomics.
 /// This handles logging, status checking, environment management, and more.
-#[derive(Clone, Debug)]
-pub struct Executable<'a> {
-    environment: Option<&'a Environment>,
-    command: NativeCommand,
+#[derive(Debug)]
+pub struct Executable {
+    program: String,
+    arguments: Vec<String>,
+    command: Command,
 }
 
-impl<'a> Executable<'a> {
-    pub fn new(command: NativeCommand) -> Self {
-        Self {
+impl Executable {
+    fn new(program: String, arguments: Vec<String>) -> Self {
+        let mut command = Command::new(&program);
+        command.args(&arguments);
+        let executable = Self {
+            program,
+            arguments,
             command,
-            environment: None,
-        }
+        };
+        debug!("Initializing command {executable}");
+        executable
     }
 
     /// Pass an environment that the command will be run with. This will
     /// *extend* the parent environment, not replace it.
-    pub fn environment(&mut self, environment: &'a Environment) -> &mut Self {
-        self.environment = Some(environment);
+    pub fn environment(&mut self, environment: &Environment) -> &mut Self {
+        debug!("Setting environment for {self}: {environment}");
+        self.command.envs(environment.iter_unmasked());
         self
-    }
-
-    /// Build a runnable Command object based on our command/args/environment
-    fn build_command(&self) -> Command {
-        // We're not actually executing yet, but this is only called right
-        // before executing so it's safe to call this now
-        match &self.environment {
-            Some(environment) => {
-                info!("Executing {self} with extra environment:\n{environment}")
-            }
-            None => info!("Executing {self}"),
-        }
-
-        let mut command = Command::new(&self.command.program);
-        command.args(&self.command.arguments);
-        if let Some(environment) = self.environment {
-            command.envs(environment.iter_unmasked());
-        }
-        command
     }
 
     /// Execute and return success/failure status. Stdout and stderr will be
     /// inherited from the parent.
-    pub fn status(&self) -> anyhow::Result<ExitStatus> {
-        self.build_command().status().context(self.to_string())
+    pub fn status(&mut self) -> anyhow::Result<ExitStatus> {
+        info!("Executing {self}");
+        self.command.status().context(self.to_string())
     }
 
     /// Execute and return captured stdout. If the command fails (status >0),
     /// return an error. Stderr will be inherited from the parent.
-    pub fn check_output(&self) -> anyhow::Result<String> {
+    pub fn check_output(&mut self) -> anyhow::Result<String> {
+        info!("Executing {self}");
         let output = self
-            .build_command()
+            .command
             // Forward stderr to the user, in case something goes wrong
             .stderr(Stdio::inherit())
             .output()
@@ -197,38 +186,14 @@ impl<'a> Executable<'a> {
     }
 }
 
-impl<'a> Display for Executable<'a> {
+impl Display for Executable {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.command)
-    }
-}
-
-impl From<NativeCommand> for Executable<'_> {
-    fn from(command: NativeCommand) -> Self {
-        Self::new(command)
-    }
-}
-
-// Convert from something like ("command", ["arg1", "arg2"])
-impl<S1: Into<String>, S2: Into<String>, I: IntoIterator<Item = S2>>
-    From<(S1, I)> for Executable<'_>
-{
-    fn from((program, arguments): (S1, I)) -> Self {
-        Self {
-            command: NativeCommand {
-                program: program.into(),
-                arguments: arguments.into_iter().map(S2::into).collect(),
-            },
-            environment: None,
+        write!(f, "`{}", self.program)?;
+        for argument in &self.arguments {
+            write!(f, " \"{argument}\"")?;
         }
-    }
-}
-
-impl TryFrom<Vec<String>> for Executable<'_> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
-        Ok(NativeCommand::try_from(value)?.into())
+        write!(f, "`")?;
+        Ok(())
     }
 }
 
@@ -236,11 +201,18 @@ impl TryFrom<Vec<String>> for Executable<'_> {
 /// Usually a .into() in the middle of a call chain can't infer correctly, so
 /// this makes the conversion unambiguous.
 pub trait IntoExecutable {
-    fn executable(self) -> Executable<'static>;
+    fn executable(self) -> Executable;
 }
 
-impl<T: Into<Executable<'static>>> IntoExecutable for T {
-    fn executable(self) -> Executable<'static> {
-        self.into()
+// Convert from something like ("command", ["arg1", "arg2"])
+impl<S1: Into<String>, S2: Into<String>, I: IntoIterator<Item = S2>>
+    IntoExecutable for (S1, I)
+{
+    fn executable(self) -> Executable {
+        let (program, arguments) = self;
+        Executable::new(
+            program.into(),
+            arguments.into_iter().map(S2::into).collect(),
+        )
     }
 }

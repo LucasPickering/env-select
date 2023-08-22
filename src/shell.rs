@@ -1,5 +1,7 @@
 use crate::{
-    config::ShellCommand, environment::Environment, execute::Executable,
+    config::ShellCommand,
+    environment::Environment,
+    execute::{Executable, IntoExecutable},
 };
 use anyhow::anyhow;
 use clap::ValueEnum;
@@ -133,7 +135,7 @@ impl Shell {
         // the shell name and hope it's in PATH
         let shell_program =
             self.path.clone().unwrap_or_else(|| self.kind.to_string());
-        (shell_program, ["-c", command]).into()
+        (shell_program, ["-c", command]).executable()
     }
 }
 

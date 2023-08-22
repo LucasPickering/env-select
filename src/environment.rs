@@ -1,6 +1,6 @@
 use crate::{
     config::{Profile, ValueSource, ValueSourceKind},
-    execute::{execute_kubernetes, IntoExecutable},
+    execute::execute_kubernetes,
     shell::Shell,
 };
 use anyhow::{anyhow, Context};
@@ -64,13 +64,8 @@ impl Environment {
             ValueSourceKind::File { path } => fs::read_to_string(&path)
                 .with_context(|| format!("Error loading file {path:?}"))?,
 
-            // Run a program+args locally
-            ValueSourceKind::NativeCommand { command } => {
-                command.executable().check_output()?
-            }
-
             // Run a command locally via the shell
-            ValueSourceKind::ShellCommand { command } => {
+            ValueSourceKind::Command { command } => {
                 shell.executable(&command).check_output()?
             }
 
@@ -125,9 +120,25 @@ impl Environment {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (variable, value) in &self.0 {
-            writeln!(f, "{variable} = {value}")?;
+        // Regular:
+        // VARIABLE1 = "value", VARIABLE2 = "value"
+        // Alternate/pretty:
+        // VARIABLE1 = "value"
+        // VARIABLE2 = "value"
+
+        for (i, (variable, value)) in self.0.iter().enumerate() {
+            // Write separator for subsequent entries
+            if i > 0 {
+                if f.alternate() {
+                    writeln!(f)?;
+                } else {
+                    write!(f, ", ")?;
+                }
+            }
+
+            write!(f, "{variable} = {value}")?;
         }
+
         Ok(())
     }
 }

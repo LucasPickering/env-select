@@ -125,14 +125,7 @@ dev also-dev
 
 ```
 
-`--` is required to delineate the arguments handled by `es` from the command being executed. The executed command is called directly, _not_ executed in a shell. To access shell features in the executed command use `--run-in-shell` (or `-r`):
-
-```sh
-> es run -r server dev -- 'echo $SERVICE1 | cat -'
-dev
-```
-
-Make sure to use **single** quotes in those case, otherwise `$SERVICE1` will be evaluted by your shell _before_ executing env-select.
+`--` is required to delineate the arguments handled by `es` from the command being executed. The executed command is executed in your shell, so you can access shell features such as pipes and aliases.
 
 ### Dynamic Values
 
@@ -142,19 +135,12 @@ You can define variables whose values are provided dynamically, by specifying a 
 [applications.db.profiles.dev.variables]
 DATABASE = "dev"
 DB_USER = "root"
-DB_PASSWORD = {type = "command", command = ["curl", "https://www.random.org/strings/?format=plain&len=10&num=1&loweralpha=on"], sensitive = true}
+DB_PASSWORD = {type = "command", command = "curl https://www.random.org/strings/?format=plain&len=10&num=1&loweralpha=on", sensitive = true}
 ```
 
 When the `dev` profile is selected for the `db` app, the `DB_PASSWORD` value will be loaded from the file `password.txt`. The `sensitive` field is an _optional_ field that will mask the value in informational logging.
 
-By default, the program (the first argument in the list) is executed directly by env-select, and passed the rest of the list as arguments. If you want to execute a command in your shell, you can use the `shell` type instead. This will give access to shell features such as aliases and pipes. For example:
-
-```toml
-[applications.db.profiles.dev.variables]
-DATABASE = "dev"
-DB_USER = "root"
-DB_PASSWORD = {type = "shell", command = "echo password | base64", sensitive = true}
-```
+The command is executed in the shell detected by env-select as your default (or the shell passed with `--shell`).
 
 ### Multiple Values from a Single Source
 
@@ -547,13 +533,10 @@ GREETING = "hello"
 
 # Literal expanded form - generally not needed
 [applications.example.profiles.literal.variables]
-GREETING = {type = "literal", value = "hello"},
+GREETING = {type = "literal", value = "hello"}
 
 [applications.example.profiles.command.variables]
-GREETING = {type = "command", command = ["echo", "hello"]}, # Native command
-
-[applications.example.profiles.shell.variables]
-GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
+GREETING = {type = "command", command = "echo hello"}
 ```
 
 #### Value Source Types
@@ -562,8 +545,7 @@ GREETING = {type = "shell", command = "echo hello | cat -"}, # Shell command
 | ----------------- | ---------------------------------------- |
 | `literal`         | Literal static value                     |
 | `file`            | Load values from a file                  |
-| `command`         | Execute an external program by name/path |
-| `shell`           | Execute a shell command                  |
+| `command`         | Execute a shell command                  |
 | `kubernetes`      | Execute a command in a Kubernetes pod    |
 
 #### Common Fields
@@ -583,8 +565,7 @@ Each source type has its own set of available fields:
 | ----------------- | -------------- | --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                            |
 | `file`            | `path`         | `string`        | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                        |
-| `command`         | `command`      | `array[string]` | **Required** | Command to execute, as `[program, ...arguments]`; the output of the command will be exported                                                                                      |
-| `shell`           | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                      |
+| `command`         | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                      |
 | `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                           |
 | `kubernetes`      | `pod_selector` | `string`        | **Required** | Label query used to find the target pod. Must match exactly one pod. See [kubectl docs](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more info. |
 | `kubernetes`      | `namespace`    | `string`        | `null`       | Namespace in which to search for the target pod. If omitted, `kubectl` will use the current context namespace.                                                                    |
@@ -599,7 +580,3 @@ env-select supports the following shells:
 - fish
 
 If you use a different shell and would like support for it, please open an issue and I'll see what I can do!
-
-```
-
-```
