@@ -1,9 +1,8 @@
 //! Utilities for tests!
 
 use crate::config::{
-    Application, Config, Name, NativeCommand, Profile, ProfileReference,
-    SideEffect, SideEffectCommand, ValueSource, ValueSourceInner,
-    ValueSourceKind,
+    Application, Config, Name, Profile, ProfileReference, SideEffect,
+    ValueSource, ValueSourceInner, ValueSourceKind,
 };
 use indexmap::{IndexMap, IndexSet};
 use rstest_reuse::{self, *};
@@ -28,27 +27,6 @@ impl From<ValueSourceKind> for ValueSource {
             sensitive: false,
             multiple: false,
         })
-    }
-}
-
-/// Shorthand for creating a native side effect
-impl<const N: usize> From<[&str; N]> for SideEffectCommand {
-    fn from(value: [&str; N]) -> Self {
-        Self::Native(
-            value
-                .into_iter()
-                .map(String::from)
-                .collect::<Vec<String>>()
-                .try_into()
-                .unwrap(),
-        )
-    }
-}
-
-/// Shorthand for creating a shell side effect
-impl From<&str> for SideEffectCommand {
-    fn from(value: &str) -> Self {
-        Self::Shell(value.into())
     }
 }
 
@@ -115,36 +93,19 @@ pub fn file(path: impl AsRef<Path>) -> ValueSource {
     .into()
 }
 
-/// Helper to create a native command
-pub fn native<const N: usize>(
-    program: &str,
-    arguments: [&str; N],
-) -> ValueSource {
-    ValueSourceKind::NativeCommand {
-        command: NativeCommand {
-            program: program.into(),
-            arguments: arguments.into_iter().map(String::from).collect(),
-        },
-    }
-    .into()
-}
-
 /// Helper to create a shell command
-pub fn shell(command: &str) -> ValueSource {
-    ValueSourceKind::ShellCommand {
-        command: command.into(),
+pub fn command(command: &str) -> ValueSource {
+    ValueSourceKind::Command {
+        command: command.to_owned().into(),
     }
     .into()
 }
 
 /// Create a side effect from (setup, teardown)
-pub fn side_effect<S: Into<SideEffectCommand>, T: Into<SideEffectCommand>>(
-    setup: S,
-    teardown: T,
-) -> SideEffect {
+pub fn side_effect(setup: &str, teardown: &str) -> SideEffect {
     SideEffect {
-        setup: Some(setup.into()),
-        teardown: Some(teardown.into()),
+        setup: Some(setup.to_owned().into()),
+        teardown: Some(teardown.to_owned().into()),
     }
 }
 

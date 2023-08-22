@@ -4,7 +4,7 @@
 use super::*;
 use crate::{
     config::{Config, Profile, ValueSourceKind},
-    test_util::{config, literal, map, native, set, shell, side_effect},
+    test_util::{command, config, literal, map, set, side_effect},
 };
 use pretty_assertions::assert_eq;
 use serde_test::{
@@ -16,12 +16,10 @@ use serde_test::{
 const CONFIG: &str = r#"
 [applications.base.profiles.base]
 pre_export = [
-    {setup = ["echo", "native", "pre", "setup"], teardown = ["echo", "native", "pre", "teardown"]},
-    {setup = "echo shell pre setup", teardown = "echo shell pre teardown"},
+    {setup = "echo pre setup", teardown = "echo pre teardown"},
 ]
 post_export = [
-    {setup = ["echo", "native", "post", "setup"], teardown = ["echo", "native", "post", "teardown"]},
-    {setup = "echo shell post setup", teardown = "echo shell post teardown"},
+    {setup = "echo post setup", teardown = "echo post teardown"},
 ]
 [applications.base.profiles.base.variables]
 I_AM_HERE = "true"
@@ -46,8 +44,7 @@ multiple = {type = "literal", value = "MULTI1=multi1\nMULTI2=multi2", multiple =
 extends = ["base"]
 [applications.server.profiles.secret.variables]
 SERVICE1 = {type = "literal", value = "secret", sensitive = true}
-SERVICE2 = {type = "command", command = ["echo", "also-secret"], sensitive = true}
-SERVICE3 = {type = "shell", command = "echo secret_password | base64", sensitive = true}
+SERVICE2 = {type = "command", command = "echo secret_password | base64", sensitive = true}
 
 
 [applications.empty]
@@ -63,26 +60,14 @@ fn test_parse_config() {
                 "base",
                 Profile {
                     extends: set([]),
-                    pre_export: vec![
-                        side_effect(
-                            ["echo", "native", "pre", "setup"],
-                            ["echo", "native", "pre", "teardown"],
-                        ),
-                        side_effect(
-                            "echo shell pre setup",
-                            "echo shell pre teardown",
-                        ),
-                    ],
-                    post_export: vec![
-                        side_effect(
-                            ["echo", "native", "post", "setup"],
-                            ["echo", "native", "post", "teardown"],
-                        ),
-                        side_effect(
-                            "echo shell post setup",
-                            "echo shell post teardown",
-                        ),
-                    ],
+                    pre_export: vec![side_effect(
+                        "echo pre setup",
+                        "echo pre teardown",
+                    )],
+                    post_export: vec![side_effect(
+                        "echo post setup",
+                        "echo post teardown",
+                    )],
                     variables: map([("I_AM_HERE", literal("true"))]),
                 },
             )],
@@ -138,11 +123,7 @@ fn test_parse_config() {
                             ("SERVICE1", literal("secret").sensitive()),
                             (
                                 "SERVICE2",
-                                native("echo", ["also-secret"]).sensitive(),
-                            ),
-                            (
-                                "SERVICE3",
-                                shell("echo secret_password | base64")
+                                command("echo secret_password | base64")
                                     .sensitive(),
                             ),
                         ]),
@@ -289,34 +270,6 @@ fn test_parse_literal() {
 
 #[test]
 fn test_parse_side_effects() {
-    // Native
-    assert_tokens(
-        &side_effect(["echo", "setup"], ["echo", "teardown"]),
-        &[
-            Token::Struct {
-                name: "SideEffect",
-                len: 2,
-            },
-            //
-            Token::Str("setup"),
-            Token::Some,
-            Token::Seq { len: Some(2) },
-            Token::Str("echo"),
-            Token::Str("setup"),
-            Token::SeqEnd,
-            //
-            Token::Str("teardown"),
-            Token::Some,
-            Token::Seq { len: Some(2) },
-            Token::Str("echo"),
-            Token::Str("teardown"),
-            Token::SeqEnd,
-            //
-            Token::StructEnd,
-        ],
-    );
-
-    // Shell
     assert_tokens(
         &side_effect("echo setup", "echo teardown"),
         &[
@@ -345,51 +298,16 @@ fn test_parse_side_effects() {
 }
 
 #[test]
-fn test_parse_native_command() {
-    assert_tokens(
-        &native("echo", ["test"]).0.kind,
-        &[
-            Token::Struct {
-                name: "ValueSourceKind",
-                len: 2,
-            },
-            Token::Str("type"),
-            Token::Str("command"),
-            Token::Str("command"),
-            Token::Seq { len: Some(2) },
-            Token::Str("echo"),
-            Token::Str("test"),
-            Token::SeqEnd,
-            Token::StructEnd,
-        ],
-    );
-
-    // Empty command - error
-    assert_de_tokens_error::<ValueSourceKind>(
-        &[
-            Token::Map { len: None },
-            Token::Str("type"),
-            Token::Str("command"),
-            Token::Str("command"),
-            Token::Seq { len: Some(0) },
-            Token::SeqEnd,
-            Token::MapEnd,
-        ],
-        "Command array must have at least one element",
-    );
-}
-
-#[test]
 fn test_parse_shell_command() {
     assert_tokens(
-        &shell("echo test").0.kind,
+        &command("echo test").0.kind,
         &[
             Token::Struct {
                 name: "ValueSourceKind",
                 len: 2,
             },
             Token::Str("type"),
-            Token::Str("shell"),
+            Token::Str("command"),
             Token::Str("command"),
             Token::NewtypeStruct {
                 name: "ShellCommand",
@@ -404,10 +322,7 @@ fn test_parse_shell_command() {
 fn test_parse_kubernetes() {
     assert_tokens(
         &ValueSourceKind::KubernetesCommand {
-            command: NativeCommand {
-                program: "printenv".to_owned(),
-                arguments: vec!["DB_PASSWORD".to_owned()],
-            },
+            command: vec!["printenv".to_owned(), "DB_PASSWORD".to_owned()],
             pod_selector: "app=api".to_owned(),
             namespace: Some("development".to_owned()),
             container: Some("main".to_owned()),
@@ -451,6 +366,6 @@ fn test_parse_unknown_type() {
             Token::MapEnd,
         ],
         "unknown variant `unknown`, expected one of \
-            `literal`, `file`, `command`, `shell`, `kubernetes`",
+            `literal`, `file`, `command`, `kubernetes`",
     )
 }
