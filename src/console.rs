@@ -1,9 +1,11 @@
 use crate::config::{Application, MapExt, Name, Profile};
 use anyhow::bail;
-use atty::Stream;
 use dialoguer::{theme::ColorfulTheme, Select};
 use indexmap::IndexMap;
-use std::fmt::Write;
+use std::{
+    fmt::Write,
+    io::{self, IsTerminal},
+};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
@@ -48,7 +50,7 @@ pub fn prompt_options<'a, T: Prompt>(
 /// Print the given message, but only if we're connected to a TTY. If not on a
 /// TTY, this hint isn't relevant so hide it.
 pub fn print_hint(message: &str) -> anyhow::Result<()> {
-    if atty::is(Stream::Stdout) {
+    if io::stdout().is_terminal() {
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         stdout.set_color(
             ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true),
