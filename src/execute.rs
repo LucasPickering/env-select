@@ -7,6 +7,7 @@ use anyhow::{anyhow, bail, Context};
 use log::{debug, info};
 use std::{
     fmt::{Display, Formatter},
+    path::Path,
     process::{Command, ExitStatus, Stdio},
 };
 
@@ -141,6 +142,13 @@ impl Executable {
         executable
     }
 
+    /// Set the current working directory of the command to be executed
+    pub fn current_dir(&mut self, dir: &Path) -> &mut Self {
+        debug!("Setting cwd for {self}: {dir:?}");
+        self.command.current_dir(dir);
+        self
+    }
+
     /// Pass an environment that the command will be run with. This will
     /// *extend* the parent environment, not replace it.
     pub fn environment(&mut self, environment: &Environment) -> &mut Self {
@@ -153,7 +161,9 @@ impl Executable {
     /// inherited from the parent.
     pub fn status(&mut self) -> anyhow::Result<ExitStatus> {
         info!("Executing {self}");
-        self.command.status().context(self.to_string())
+        self.command
+            .status()
+            .with_context(|| format!("Error executing command {self}"))
     }
 
     /// Execute and return captured stdout. If the command fails (status >0),
@@ -165,7 +175,7 @@ impl Executable {
             // Forward stderr to the user, in case something goes wrong
             .stderr(Stdio::inherit())
             .output()
-            .context(self.to_string())?;
+            .with_context(|| format!("Error executing command {self}"))?;
         // TODO Replace with ExitStatus::exit_ok
         // https://github.com/rust-lang/rust/issues/84908
         if output.status.success() {
@@ -188,12 +198,7 @@ impl Executable {
 
 impl Display for Executable {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`{}", self.program)?;
-        for argument in &self.arguments {
-            write!(f, " \"{argument}\"")?;
-        }
-        write!(f, "`")?;
-        Ok(())
+        write!(f, "`{} {:?}`", self.program, self.arguments)
     }
 }
 

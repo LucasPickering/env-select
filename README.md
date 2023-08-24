@@ -71,21 +71,21 @@ Because env-select modifies your shell environment, it requires a wrapper functi
 #### Bash
 
 ```sh
-echo 'eval "$(env-select init)"' >> ~/.bashrc
+echo 'eval "$(env-select --shell bash init)"' >> ~/.bashrc
 source ~/.bashrc # Run this in every existing shell
 ```
 
 #### Zsh
 
 ```sh
-echo 'source <(env-select init)' >> ~/.zshrc
+echo 'source <(env-select --shell zsh init)' >> ~/.zshrc
 source ~/.zshrc # Run this in every existing shell
 ```
 
 #### Fish
 
 ```sh
-echo 'env-select init | source' >> ~/.config/fish/config.fish
+echo 'env-select --shell fish init | source' >> ~/.config/fish/config.fish
 source ~/.config/fish/config.fish # Run this in every existing shell
 ```
 

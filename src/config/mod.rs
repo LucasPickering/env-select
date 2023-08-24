@@ -122,7 +122,11 @@ pub enum ValueSourceKind {
 
     /// A command that will be executed via the shell
     #[serde(rename = "command")]
-    Command { command: ShellCommand },
+    Command {
+        command: ShellCommand,
+        /// If omitted, use inherited cwd. Relative to config file
+        cwd: Option<PathBuf>,
+    },
 
     /// Run a command in a kubernetes pod.
     #[serde(rename = "kubernetes")]
@@ -169,7 +173,7 @@ pub struct SideEffect {
     Serialize,
     Deserialize,
 )]
-#[display(fmt = "`{}`", "0")]
+#[display(fmt = "`{}`", _0)]
 pub struct ShellCommand(String);
 
 impl Config {
@@ -330,11 +334,23 @@ impl SideEffect {
 
 impl Display for ValueSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0.kind {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for ValueSourceInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
             ValueSourceKind::Literal { value } => write!(f, "\"{value}\""),
             ValueSourceKind::File { path } => write!(f, "{}", path.display()),
-            ValueSourceKind::Command { command } => {
-                write!(f, "{command}")
+            ValueSourceKind::Command { command, cwd } => {
+                write!(f, "{command}")?;
+                match cwd {
+                    Some(cwd) => {
+                        write!(f, " ({})", cwd.display())
+                    }
+                    None => write!(f, " (current directory)"),
+                }
             }
             ValueSourceKind::KubernetesCommand {
                 command,

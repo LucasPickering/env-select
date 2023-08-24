@@ -96,8 +96,14 @@ impl<'a> Qualify<'a> for ValueSource {
     type Context = ApplicationContext<'a>;
 
     fn qualify(&mut self, context: &Self::Context) {
-        if let ValueSourceKind::File { path } = &mut self.0.kind {
-            path.qualify(context.config_path);
+        match &mut self.0.kind {
+            ValueSourceKind::File { path } => {
+                path.qualify(context.config_path);
+            }
+            ValueSourceKind::Command { cwd: Some(cwd), .. } => {
+                cwd.qualify(context.config_path);
+            }
+            _ => {}
         }
     }
 }
@@ -123,11 +129,15 @@ impl<'a> Qualify<'a> for PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         config::Profile,
-        test_util::{config, file, map, set},
+        test_util::{command, config, file, map, set},
     };
     use pretty_assertions::assert_eq;
+    use rstest::rstest;
+
+    const CONFIG_PATH: &str = "/root/.env-select.toml";
 
     #[test]
     fn test_qualify_profile_reference() {
@@ -157,7 +167,7 @@ mod tests {
                 ),
             ],
         )]);
-        cfg.qualify("");
+        cfg.qualify(CONFIG_PATH);
         assert_eq!(
             cfg,
             config(vec![(
@@ -190,21 +200,48 @@ mod tests {
     }
 
     #[test]
+    fn test_qualify_command_cwd_path() {
+        let mut cfg = config(vec![(
+            "app",
+            vec![(
+                "prof",
+                Profile {
+                    variables: map([
+                        ("VAR1", command("echo")),
+                        ("VAR2", command("echo").cwd(".venv/bin")),
+                    ]),
+                    ..Default::default()
+                },
+            )],
+        )]);
+        cfg.qualify(CONFIG_PATH);
+        assert_eq!(
+            cfg,
+            config(vec![(
+                "app",
+                vec![(
+                    "prof",
+                    Profile {
+                        variables: map([
+                            ("VAR1", command("echo")),
+                            ("VAR2", command("echo").cwd("/root/.venv/bin")),
+                        ]),
+                        ..Default::default()
+                    },
+                )],
+            )])
+        );
+    }
+
+    #[test]
     fn test_qualify_file_value_path() {
         let mut cfg = config(vec![(
             "app",
             vec![(
                 "prof",
                 Profile {
-                    extends: set([]),
-                    pre_export: vec![],
-                    post_export: vec![],
-                    variables: map([
-                        ("VAR1", file("var.txt")),
-                        ("VAR2", file("../var.txt")),
-                        ("VAR3", file("data/var.txt")),
-                        ("VAR4", file("/usr/var.txt")),
-                    ]),
+                    variables: map([("VAR1", file("var.txt"))]),
+                    ..Default::default()
                 },
             )],
         )]);
@@ -216,18 +253,29 @@ mod tests {
                 vec![(
                     "prof",
                     Profile {
-                        extends: set([]),
-                        pre_export: vec![],
-                        post_export: vec![],
-                        variables: map([
-                            ("VAR1", file("/root/var.txt")),
-                            ("VAR2", file("/root/../var.txt")),
-                            ("VAR3", file("/root/data/var.txt")),
-                            ("VAR4", file("/usr/var.txt")),
-                        ]),
+                        variables: map([("VAR1", file("/root/var.txt"))]),
+                        ..Default::default()
                     },
                 )],
             )])
         );
+    }
+
+    /// Detailed test cases for qualifying file paths
+    #[rstest]
+    // Directories
+    #[case(".", "/root")]
+    #[case("..", "/root/..")]
+    #[case(".venv", "/root/.venv")]
+    // Files
+    #[case("var.txt", "/root/var.txt")]
+    #[case("../var.txt", "/root/../var.txt")]
+    #[case("data/var.txt", "/root/data/var.txt")]
+    #[case("/usr/var.txt", "/usr/var.txt")]
+    fn test_qualify_path(#[case] path: &str, #[case] expected: &str) {
+        let mut path = PathBuf::from(path);
+        let expected = PathBuf::from(expected);
+        path.qualify(&PathBuf::from(CONFIG_PATH));
+        assert_eq!(path, expected);
     }
 }

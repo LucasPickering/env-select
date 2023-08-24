@@ -338,7 +338,7 @@ Side effects are executed in their order of definition for setup, and the **reve
 
 #### Side Effect Inheritance
 
-Inherited side effects are executed *before* side effects defined in the selected profile during setup, and therefore *after* during teardown. For profiles with multiple parents, the *left-most* parent's side effects will execute first.
+Inherited side effects are executed _before_ side effects defined in the selected profile during setup, and therefore _after_ during teardown. For profiles with multiple parents, the _left-most_ parent's side effects will execute first.
 
 An example of a config with inheritance:
 
@@ -541,12 +541,12 @@ GREETING = {type = "command", command = "echo hello"}
 
 #### Value Source Types
 
-| Value Source Type | Description                              |
-| ----------------- | ---------------------------------------- |
-| `literal`         | Literal static value                     |
-| `file`            | Load values from a file                  |
-| `command`         | Execute a shell command                  |
-| `kubernetes`      | Execute a command in a Kubernetes pod    |
+| Value Source Type | Description                           |
+| ----------------- | ------------------------------------- |
+| `literal`         | Literal static value                  |
+| `file`            | Load values from a file               |
+| `command`         | Execute a shell command               |
+| `kubernetes`      | Execute a command in a Kubernetes pod |
 
 #### Common Fields
 
@@ -561,15 +561,16 @@ All value sources support the following common fields:
 
 Each source type has its own set of available fields:
 
-| Value Source Type | Field          | Type            | Default      | Description                                                                                                                                                                       |
-| ----------------- | -------------- | --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                            |
-| `file`            | `path`         | `string`        | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                        |
-| `command`         | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                      |
-| `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                           |
-| `kubernetes`      | `pod_selector` | `string`        | **Required** | Label query used to find the target pod. Must match exactly one pod. See [kubectl docs](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more info. |
-| `kubernetes`      | `namespace`    | `string`        | `null`       | Namespace in which to search for the target pod. If omitted, `kubectl` will use the current context namespace.                                                                    |
-| `kubernetes`      | `container`    | `string`        | `null`       | Container within the target pod to execute in. If omitted, `kubectl` will use the default defined by the `kubectl.kubernetes.io/default-container` annotation.                    |
+| Value Source Type | Field          | Type            | Default      | Description                                                                                                                                                                                 |
+| ----------------- | -------------- | --------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                                      |
+| `file`            | `path`         | `string`        | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                                  |
+| `command`         | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                                |
+| `command`         | `cwd`          | `string`        | `null`       | Directory from which to execute the command. Defaults to the directory from which `es` was invoked. Paths will be relative to the `.env-select.toml` file in which this command is defined. |
+| `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                                     |
+| `kubernetes`      | `pod_selector` | `string`        | **Required** | Label query used to find the target pod. Must match exactly one pod. See [kubectl docs](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more info.           |
+| `kubernetes`      | `namespace`    | `string`        | `null`       | Namespace in which to search for the target pod. If omitted, `kubectl` will use the current context namespace.                                                                              |
+| `kubernetes`      | `container`    | `string`        | `null`       | Container within the target pod to execute in. If omitted, `kubectl` will use the default defined by the `kubectl.kubernetes.io/default-container` annotation.                              |
 
 ## Shell Support
 

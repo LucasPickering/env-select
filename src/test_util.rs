@@ -41,6 +41,16 @@ impl ValueSource {
         self.0.multiple = true;
         self
     }
+
+    pub fn cwd(mut self, cwd: &str) -> Self {
+        match &mut self.0.kind {
+            ValueSourceKind::Command { cwd: dest, .. } => {
+                *dest = Some(cwd.into())
+            }
+            _ => unimplemented!(),
+        }
+        self
+    }
 }
 
 /// Helper to create a full config, from a mapping of applications and profiles
@@ -97,6 +107,7 @@ pub fn file(path: impl AsRef<Path>) -> ValueSource {
 pub fn command(command: &str) -> ValueSource {
     ValueSourceKind::Command {
         command: command.to_owned().into(),
+        cwd: None,
     }
     .into()
 }
