@@ -7,7 +7,7 @@ license = "MIT"
 name = "env-select"
 repository = "https://github.com/LucasPickering/env-select"
 # Keep in sync w/ rust-toolchain.toml
-rust-version = "1.67.1"
+rust-version = "1.72.0"
 version = "0.11.0"
 
 [[bin]]
@@ -15,26 +15,25 @@ name = "env-select"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = {version = "1.0.65", features = ["backtrace"]}
-atty = "0.2.14"
-clap = {version = "4.0.17", features = ["derive"]}
-ctrlc = "3.2.3"
-derive_more = "0.99.17"
-dialoguer = {version = "0.10.2", default-features = false}
-dotenv-parser = {version = "0.1.3", default-features = false}
-env_logger = {version = "0.9.1", default-features = false, features = ["atty", "termcolor"]}
-indexmap = {version = "2.0.0", features = ["serde"]}
-log = "0.4.17"
-serde = {version = "1.0.145", default-features = false, features = ["derive"]}
-termcolor = "1.2.0"
-toml = {version = "0.7.5", features = ["preserve_order"]}
+anyhow = {version = "^1.0.65", features = ["backtrace"]}
+clap = {version = "^4.4.0", features = ["derive"]}
+ctrlc = "^3.2.3"
+derive_more = "^0.99.17"
+dialoguer = {version = "^0.10.2", default-features = false}
+dotenv-parser = {version = "0.1.3", default-features = false}# Pinned because unpopular
+env_logger = {version = "^0.10.0", default-features = false, features = ["color"]}
+indexmap = {version = "^2.0.0", features = ["serde"]}
+log = "^0.4.17"
+serde = {version = "^1.0.145", default-features = false, features = ["derive"]}
+termcolor = "^1.2.0"
+toml = {version = "^0.7.5", features = ["preserve_order"]}
 
 [dev-dependencies]
-assert_cmd = {version = "2.0.11", default-features = false, features = ["color-auto"]}
-pretty_assertions = "1.4.0"
-rstest = {version = "0.17.0", default-features = false}
-rstest_reuse = "0.6.0"
-serde_test = "1.0.165"
+assert_cmd = {version = "^2.0.11", default-features = false, features = ["color-auto"]}
+pretty_assertions = "^1.4.0"
+rstest = {version = "^0.18.2", default-features = false}
+rstest_reuse = "^0.6.0"
+serde_test = "^1.0.165"
 
 [package.metadata.release]
 # https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
