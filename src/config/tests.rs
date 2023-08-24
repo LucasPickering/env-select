@@ -299,12 +299,13 @@ fn test_parse_side_effects() {
 
 #[test]
 fn test_parse_shell_command() {
+    // Without cwd
     assert_tokens(
         &command("echo test").0.kind,
         &[
             Token::Struct {
                 name: "ValueSourceKind",
-                len: 2,
+                len: 3,
             },
             Token::Str("type"),
             Token::Str("command"),
@@ -313,6 +314,30 @@ fn test_parse_shell_command() {
                 name: "ShellCommand",
             },
             Token::Str("echo test"),
+            Token::Str("cwd"),
+            Token::None,
+            Token::StructEnd,
+        ],
+    );
+
+    // With cwd
+    assert_tokens(
+        &command("echo test").cwd("/root").0.kind,
+        &[
+            Token::Struct {
+                name: "ValueSourceKind",
+                len: 3,
+            },
+            Token::Str("type"),
+            Token::Str("command"),
+            Token::Str("command"),
+            Token::NewtypeStruct {
+                name: "ShellCommand",
+            },
+            Token::Str("echo test"),
+            Token::Str("cwd"),
+            Token::Some,
+            Token::Str("/root"),
             Token::StructEnd,
         ],
     );
