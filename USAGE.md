@@ -210,42 +210,6 @@ In this scenario, `SERVICE1` will be loaded from `~/code/service1.txt` while `SE
 
 This value source combines well with the `multiple` field to load `.env` files. [See here](#multiple-values-from-a-single-source).
 
-### Load Values from Kubernetes
-
-Ever had a secret in a Kubernetes pod that you want to fetch easily? The `kubernetes` value source lets you run any command in a kubernetes pod.
-
-```toml
-[applications.db.profiles.dev.variables]
-DATABASE = "dev"
-DB_USER = "root"
-DB_PASSWORD = {type = "kubernetes", namespace = "development", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
-
-[applications.db.profiles.prd.variables]
-DATABASE = "prd"
-DB_USER = "root"
-DB_PASSWORD = {type = "kubernetes", namespace = "production", pod_selector = "app=api", command = ["printenv", "DB_PASSWORD"]}
-```
-
-`printenv` can be used to easily access environment variables, but you can execute any command you want in the pod. To access shell features in the pod, you'll need to execute under a shell. For example:
-
-```
-command = ["sh", "-c", "env | grep DB_PASSWORD | sed -E 's/.+=(.+)/\1/'"]
-```
-
-You can combine this with the `multiple = true` flag to fetch multiple values at once:
-
-```toml
-[applications.db.profiles.dev.variables]
-DATABASE = "dev"
-# The `creds` key is *not* significant here - you can name it anything you want
-[applications.db.profiles.dev.variables.creds]
-type = "kubernetes"
-namespace = "development"
-pod_selector = "app=api"
-command = ["sh", "-c", "printenv | grep -E '^(DB_USER|DB_PASSWORD)='"]
-multiple = true
-```
-
 ### PATH Variable
 
 If you want to modify the PATH variable, typically you just want to add to it, rather than replace it. Env-select will do this automatically, if the variable has the name `PATH`.
@@ -541,12 +505,11 @@ GREETING = {type = "command", command = "echo hello"}
 
 #### Value Source Types
 
-| Value Source Type | Description                           |
-| ----------------- | ------------------------------------- |
-| `literal`         | Literal static value                  |
-| `file`            | Load values from a file               |
-| `command`         | Execute a shell command               |
-| `kubernetes`      | Execute a command in a Kubernetes pod |
+| Value Source Type | Description             |
+| ----------------- | ----------------------- |
+| `literal`         | Literal static value    |
+| `file`            | Load values from a file |
+| `command`         | Execute a shell command |
 
 #### Common Fields
 
@@ -561,16 +524,12 @@ All value sources support the following common fields:
 
 Each source type has its own set of available fields:
 
-| Value Source Type | Field          | Type            | Default      | Description                                                                                                                                                                                 |
-| ----------------- | -------------- | --------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `literal`         | `value`        | `string`        | **Required** | Static value to export                                                                                                                                                                      |
-| `file`            | `path`         | `string`        | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                                  |
-| `command`         | `command`      | `string`        | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                                |
-| `command`         | `cwd`          | `string`        | `null`       | Directory from which to execute the command. Defaults to the directory from which `es` was invoked. Paths will be relative to the `.env-select.toml` file in which this command is defined. |
-| `kubernetes`      | `command`      | `array[string]` | **Required** | Command to execute in the pod, as `[program, ...arguments]`; the output of the command will be exported                                                                                     |
-| `kubernetes`      | `pod_selector` | `string`        | **Required** | Label query used to find the target pod. Must match exactly one pod. See [kubectl docs](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for more info.           |
-| `kubernetes`      | `namespace`    | `string`        | `null`       | Namespace in which to search for the target pod. If omitted, `kubectl` will use the current context namespace.                                                                              |
-| `kubernetes`      | `container`    | `string`        | `null`       | Container within the target pod to execute in. If omitted, `kubectl` will use the default defined by the `kubectl.kubernetes.io/default-container` annotation.                              |
+| Value Source Type | Field     | Type     | Default      | Description                                                                                                                                                                                 |
+| ----------------- | --------- | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `literal`         | `value`   | `string` | **Required** | Static value to export                                                                                                                                                                      |
+| `file`            | `path`    | `string` | **Required** | Path to the file, relative to **the config file in which this is defined**                                                                                                                  |
+| `command`         | `command` | `string` | **Required** | Command to execute in a subshell; the output of the command will be exported                                                                                                                |
+| `command`         | `cwd`     | `string` | `null`       | Directory from which to execute the command. Defaults to the directory from which `es` was invoked. Paths will be relative to the `.env-select.toml` file in which this command is defined. |
 
 ## Shell Support
 

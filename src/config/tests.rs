@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::{
-    config::{Config, Profile, ValueSourceKind},
+    config::{Config, Profile},
     test_util::{command, config, literal, map, set, side_effect},
 };
 use pretty_assertions::assert_eq;
@@ -344,44 +344,6 @@ fn test_parse_shell_command() {
 }
 
 #[test]
-fn test_parse_kubernetes() {
-    assert_tokens(
-        &ValueSourceKind::KubernetesCommand {
-            command: vec!["printenv".to_owned(), "DB_PASSWORD".to_owned()],
-            pod_selector: "app=api".to_owned(),
-            namespace: Some("development".to_owned()),
-            container: Some("main".to_owned()),
-        },
-        &[
-            Token::Struct {
-                name: "ValueSourceKind",
-                len: 5,
-            },
-            Token::Str("type"),
-            Token::Str("kubernetes"),
-            //
-            Token::Str("command"),
-            Token::Seq { len: Some(2) },
-            Token::Str("printenv"),
-            Token::Str("DB_PASSWORD"),
-            Token::SeqEnd,
-            //
-            Token::Str("pod_selector"),
-            Token::Str("app=api"),
-            //
-            Token::Str("namespace"),
-            Token::Some,
-            Token::Str("development"),
-            //
-            Token::Str("container"),
-            Token::Some,
-            Token::Str("main"),
-            Token::StructEnd,
-        ],
-    );
-}
-
-#[test]
 fn test_parse_unknown_type() {
     assert_de_tokens_error::<ValueSource>(
         &[
@@ -391,6 +353,6 @@ fn test_parse_unknown_type() {
             Token::MapEnd,
         ],
         "unknown variant `unknown`, expected one of \
-            `literal`, `file`, `command`, `kubernetes`",
+            `literal`, `file`, `command`",
     )
 }
