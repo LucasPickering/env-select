@@ -7,7 +7,7 @@ Easily switch between predefined values for arbitrary environment variables Feat
 
 - Interative prompts to select between variable profiles
 - Cascading config system, allowing for system and repo-level value definitions
-- Grab values dynamically via local commands or Kubernetes pods
+- Grab values dynamically via shell commands
 - Modify your shell environment with `es set`, or run a one-off command in a modified environment with `es run`
 - Re-use common variables between profiles with inheritance
 

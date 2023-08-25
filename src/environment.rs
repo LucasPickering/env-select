@@ -1,6 +1,5 @@
 use crate::{
     config::{Profile, ValueSource, ValueSourceKind},
-    execute::execute_kubernetes,
     shell::Shell,
 };
 use anyhow::{anyhow, Context};
@@ -76,19 +75,6 @@ impl Environment {
                 }
                 executable.check_output()?
             }
-
-            // Run a program+args in a kubernetes pod/container
-            ValueSourceKind::KubernetesCommand {
-                command,
-                pod_selector: pod_filter,
-                namespace,
-                container,
-            } => execute_kubernetes(
-                &command,
-                &pod_filter,
-                namespace.as_deref(),
-                container.as_deref(),
-            )?,
         };
 
         if value_source.multiple {
@@ -227,8 +213,6 @@ mod tests {
             Environment(map([("VARIABLE1", resolved_value("test"))]))
         );
     }
-
-    // TODO figure out how to test kubernetes
 
     #[test]
     fn test_resolve_multiple() {

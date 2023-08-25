@@ -3,80 +3,13 @@ use crate::{
     environment::Environment,
     shell::Shell,
 };
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
 use log::{debug, info};
 use std::{
     fmt::{Display, Formatter},
     path::Path,
     process::{Command, ExitStatus, Stdio},
 };
-
-/// Execute a command in a kubernetes pod, returning its stdout. The pod will
-/// be identified by the given namespace (or current namespace if `None`) and
-/// the given pod selector. Optionally you can specify a container within the
-/// pod to use.
-///
-/// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-pub fn execute_kubernetes(
-    command: &[String],
-    pod_selector: &str,
-    namespace: Option<&str>,
-    container: Option<&str>,
-) -> anyhow::Result<String> {
-    info!(
-        "Executing {command:?} in kubernetes namespace={}, \
-            pod_selector={}, container={}",
-        namespace.unwrap_or_default(),
-        pod_selector,
-        container.unwrap_or_default()
-    );
-
-    // Find the name of the pod to execute in
-    let mut kgp_arguments = vec![
-        "get",
-        "pod",
-        "-l",
-        pod_selector,
-        "--no-headers",
-        "-o",
-        "custom-columns=:metadata.name",
-    ];
-    // Add namespace filter if given, otherwise use current namespace
-    if let Some(namespace) = namespace {
-        kgp_arguments.extend(["-n", namespace]);
-    }
-    let pod_output = ("kubectl", kgp_arguments).executable().check_output()?;
-    let lines = pod_output.lines().collect::<Vec<_>>();
-    debug!("Found pods: {lines:?}");
-    let pod_name = match lines.as_slice() {
-        [] => bail!(
-            "No pods matching filter {} in namespace {}",
-            pod_selector,
-            namespace.unwrap_or("<none>")
-        ),
-        [pod_name] => pod_name,
-        pod_names => bail!(
-            "Multiple pods matching filter {} in namespace {}: {:?}",
-            pod_selector,
-            namespace.unwrap_or("<none>"),
-            pod_names
-        ),
-    };
-
-    // Use `kubectl exec` to run the command in the pod
-    let mut kexec_arguments = vec!["exec", pod_name];
-    // Add namespace and container filters, if given
-    if let Some(namespace) = &namespace {
-        kexec_arguments.extend(["-n", namespace]);
-    }
-    if let Some(container) = &container {
-        kexec_arguments.extend(["-c", container]);
-    }
-    // Add the actual command
-    kexec_arguments.push("--");
-    kexec_arguments.extend(command.iter().map(String::as_str));
-    ("kubectl", kexec_arguments).executable().check_output()
-}
 
 /// Execute the *setup* stage of a list of side effects
 pub fn apply_side_effects(

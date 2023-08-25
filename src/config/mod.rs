@@ -127,22 +127,6 @@ pub enum ValueSourceKind {
         /// If omitted, use inherited cwd. Relative to config file
         cwd: Option<PathBuf>,
     },
-
-    /// Run a command in a kubernetes pod.
-    #[serde(rename = "kubernetes")]
-    KubernetesCommand {
-        /// Command to execute in the pod
-        command: Vec<String>,
-        /// Label query used to find the pod
-        /// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-        pod_selector: String,
-        /// Optional namespace to run in. If omitted, use current namespace
-        /// from kubectl context.
-        namespace: Option<String>,
-        /// Optional container to run in. If omitted, use
-        /// `kubectl.kubernetes.io/default-container` annotation.
-        container: Option<String>,
-    },
 }
 
 /// A pair of imperative commands to run. The setup command is run during
@@ -351,23 +335,6 @@ impl Display for ValueSourceInner {
                     }
                     None => write!(f, " (current directory)"),
                 }
-            }
-            ValueSourceKind::KubernetesCommand {
-                command,
-                pod_selector,
-                namespace,
-                container,
-            } => {
-                write!(
-                    f,
-                    "{command:?} (kubernetes {}[{pod_selector}]",
-                    namespace.as_deref().unwrap_or("<current namespace>")
-                )?;
-                if let Some(container) = container {
-                    write!(f, ".{container}")?;
-                }
-                write!(f, ")")?;
-                Ok(())
             }
         }
     }
