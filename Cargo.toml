@@ -21,7 +21,7 @@ ctrlc = "^3.2.3"
 derive_more = "^0.99.17"
 dialoguer = {version = "^0.10.2", default-features = false}
 dotenv-parser = {version = "0.1.3", default-features = false}# Pinned because unpopular
-env_logger = {version = "^0.10.0", default-features = false, features = ["color"]}
+env_logger = {version = "^0.10.0", default-features = false, features = ["auto-color"]}
 indexmap = {version = "^2.0.0", features = ["serde"]}
 log = "^0.4.17"
 serde = {version = "^1.0.145", default-features = false, features = ["derive"]}
