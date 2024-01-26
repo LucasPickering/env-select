@@ -32,7 +32,7 @@ use std::{
 /// A utility to select between predefined values or sets of environment
 /// variables.
 #[derive(Clone, Debug, Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(bin_name = "es", author, version, about, long_about = None)]
 struct Args {
     /// Subcommand to execute
     #[command(subcommand)]
