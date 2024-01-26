@@ -6,6 +6,10 @@
 
 - [A new website!](https://env-select.lucaspickering.me)
 
+### Changed
+
+- Use `es` instead of `env-select` in CLI help output
+
 ## [0.12.0] - 2024-01-26
 
 ### Changed
