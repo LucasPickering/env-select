@@ -1,0 +1,11 @@
+[book]
+authors = ["Lucas Pickering"]
+description = "Easily switch between common values for arbitrary environment variables"
+language = "en"
+multilingual = false
+src = "src"
+title = "env-select"
+
+[output.html]
+edit-url-template = "https://github.com/LucasPickering/env-select/edit/master/docs/{path}"
+git-repository-url = "https://github.com/LucasPickering/env-select"
