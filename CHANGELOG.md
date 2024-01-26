@@ -9,6 +9,7 @@
 ### Changed
 
 - Use `es` instead of `env-select` in CLI help output
+- `es show config` now accepts optional arguments to print for a single application or profile
 
 ## [0.12.0] - 2024-01-26
 
