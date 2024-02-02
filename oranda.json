@@ -1,0 +1,14 @@
+{
+  "components": {
+    "artifacts": {
+      "package_managers": {
+        "preferred": {
+          "cargo": "cargo install env-select"
+        },
+        "additional": {
+          "binstall": "cargo binstall env-select"
+        }
+      }
+    }
+  }
+}

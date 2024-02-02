@@ -47,11 +47,11 @@ cargo-dist-version = "0.6.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
-installers = ["homebrew"]
+installers = ["homebrew", "shell"]
 # Publish jobs to run in CI
 pr-run-mode = "plan"
 # Publish jobs to run in CI
-publish-jobs = ["homebrew", "homebrew"]
+publish-jobs = ["homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "LucasPickering/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
@@ -59,9 +59,9 @@ targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-dar
 
 [workspace.metadata.release]
 # https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
-allow-branch = ["master"] 
+allow-branch = ["master"]
 pre-release-replacements = [
   {file = "CHANGELOG.md", search = "Unreleased", replace = "{{version}}"},
   {file = "CHANGELOG.md", search = "ReleaseDate", replace = "{{date}}"},
-] 
-publish = false # CI will handle this
+]
+publish = false

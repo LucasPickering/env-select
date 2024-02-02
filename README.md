@@ -27,6 +27,8 @@ variables = {SERVICE1 = "dev", SERVICE2 = "also-dev"}
 variables = {SERVICE1 = "prd", SERVICE2 = "also-prd"}
 ```
 
+Now pick an environment to export:
+
 ```sh
 > es set server
 ❯ === dev ===
