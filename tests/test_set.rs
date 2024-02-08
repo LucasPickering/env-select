@@ -39,8 +39,7 @@ VARIABLE1 = abc
 VARIABLE2 = def
 VARIABLE3 = ghi
 FILE_VARIABLE1 = 123
-FILE_VARIABLE2 = 456
-abc def ghi 123 456",
+abc def ghi 123",
     )
     .stderr("");
 }

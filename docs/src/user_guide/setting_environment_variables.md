@@ -97,6 +97,25 @@ DB_PASSWORD=hunter2
 
 Notice the `creds` key never appears in the environment; this is just a placeholder. You can use any key you want here.
 
+### Filtering Loaded Values
+
+If you want to load only _some_ values from a source, you can filter which are loaded by passing a list of variables to `multiple`. This is useful in scenarios where you dump an entire environment. For example:
+
+```toml
+[applications.db.profiles.dev.variables]
+DATABASE = "dev"
+creds = {type = "command", command = "ssh me@remote printenv", multiple = ["DB_USER", "DB_PASSWORD"]}
+```
+
+This will only load the `DB_USER` and `DB_PASSWORD` variables:
+
+```sh
+> es run db dev -- printenv
+DATABASE=dev
+DB_USER=root
+DB_PASSWORD=hunter2
+```
+
 ## Adding to the PATH Variable
 
 If you want to modify the `PATH` variable, typically you just want to add to it, rather than replace it. Because of this, env-select will treat the variable `PATH` specially.
