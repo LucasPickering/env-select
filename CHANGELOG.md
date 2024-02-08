@@ -6,6 +6,11 @@
 
 - Pass a list of strings to `multiple` to filter which values are loaded from a mapping
 
+### Changed
+
+- Resolve values in parallel
+  - This means profile resolution will only take as long as the slowest step, rather than the sum of all steps
+
 ## [1.0.0] - 2024-02-02
 
 ### Added

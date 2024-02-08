@@ -4,12 +4,11 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 
+use futures::future;
 use indexmap::IndexMap;
 use log::info;
-use std::{
-    fmt::{Display, Formatter},
-    fs,
-};
+use smol::fs;
+use std::fmt::{Display, Formatter};
 
 /// Container of VARIABLE=value mappings. This handles resolving value sources
 /// into values, including processing multi-value outputs.
@@ -30,11 +29,28 @@ impl Environment {
         profile: &Profile,
     ) -> anyhow::Result<Self> {
         let mut environment = Self::default();
-        for (variable, value) in &profile.variables {
-            environment.resolve_variable(
-                shell,
-                variable.into(),
-                value.clone(),
+
+        // Resolve all values in parallel
+        let resolved: Vec<(&str, &ValueSource, String)> = smol::block_on(
+            future::try_join_all(profile.variables.iter().map(
+                |(variable, value_source)| async move {
+                    info!("Resolving {variable} = {value_source}");
+                    let value =
+                        Self::resolve_value(shell, value_source).await?;
+                    Ok::<_, anyhow::Error>((
+                        variable.as_str(),
+                        value_source,
+                        value,
+                    ))
+                },
+            )),
+        )?;
+
+        for (variable, value_source, value) in resolved {
+            environment.apply_variable(
+                variable.to_owned(),
+                value_source,
+                value,
             )?;
         }
         Ok(environment)
@@ -48,35 +64,14 @@ impl Environment {
             .map(|(variable, value)| (variable.as_str(), value.value.as_str()))
     }
 
-    /// Get a string for a Value. This may involve external communication, e.g.
-    /// running a shell command. Resolved value(s) will be inserted into the
-    /// environment.
-    fn resolve_variable(
+    /// Update this environment with a resolved value string. If it's a
+    /// multi-variable mapping, parse it and insert all sub-variables.
+    fn apply_variable(
         &mut self,
-        shell: &Shell,
         variable: String,
-        ValueSource(value_source): ValueSource,
+        ValueSource(value_source): &ValueSource,
+        raw_value: String,
     ) -> anyhow::Result<()> {
-        info!("Resolving {variable} = {value_source}");
-
-        // Resolve the string value, which could be treated as one value or a
-        // mapping of multiple down below
-        let raw_value = match value_source.kind {
-            ValueSourceKind::Literal { value } => value,
-            ValueSourceKind::File { path } => fs::read_to_string(&path)
-                .with_context(|| format!("Error loading file {path:?}"))?,
-
-            // Run a command locally via the shell
-            ValueSourceKind::Command { command, cwd } => {
-                let mut executable = shell.executable(&command);
-                // If cwd is given, use that. Otherwise inherit from the user
-                if let Some(cwd) = cwd {
-                    executable.current_dir(&cwd);
-                }
-                executable.check_output()?
-            }
-        };
-
         if value_source.multiple.enabled() {
             // If we're expecting a multi-value mapping, parse that now. We'll
             // throw away the variable name from the config and use the ones in
@@ -101,6 +96,32 @@ impl Environment {
         }
 
         Ok(())
+    }
+
+    /// Calculate the raw value from a value source. For multi-value sources,
+    /// the mapping string will be returned.
+    async fn resolve_value(
+        shell: &Shell,
+        ValueSource(value_source): &ValueSource,
+    ) -> anyhow::Result<String> {
+        // Resolve the string value, which could be treated as one value or a
+        // mapping of multiple down below
+        match &value_source.kind {
+            ValueSourceKind::Literal { value } => Ok(value.clone()),
+            ValueSourceKind::File { path } => fs::read_to_string(path)
+                .await
+                .with_context(|| format!("Error loading file {path:?}")),
+
+            // Run a command locally via the shell
+            ValueSourceKind::Command { command, cwd } => {
+                let mut executable = shell.executable(command);
+                // If cwd is given, use that. Otherwise inherit from the user
+                if let Some(cwd) = cwd {
+                    executable.current_dir(cwd);
+                }
+                executable.check_output().await
+            }
+        }
     }
 
     /// Insert a variable=value mapping into the environment
@@ -210,7 +231,7 @@ mod tests {
     #[test]
     fn test_resolve_file() {
         let path = env::temp_dir().join("test_file");
-        fs::write(&path, "test").unwrap();
+        std::fs::write(&path, "test").unwrap();
         assert_eq!(
             environment(map([("VARIABLE1", file(&path))])).unwrap(),
             Environment(map([("VARIABLE1", resolved_value("test"))]))
