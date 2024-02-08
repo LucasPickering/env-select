@@ -5,10 +5,10 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use log::{debug, info};
+use smol::process::{Command, ExitStatus, Stdio};
 use std::{
     fmt::{Display, Formatter},
     path::Path,
-    process::{Command, ExitStatus, Stdio},
 };
 
 /// Execute the *setup* stage of a list of side effects
@@ -44,13 +44,17 @@ fn execute_side_effects<'a>(
     shell: &Shell,
     environment: &Environment,
 ) -> anyhow::Result<()> {
-    for command in commands {
-        shell
-            .executable(command)
-            .environment(environment)
-            .status()?;
-    }
-    Ok(())
+    // Execute side-effects sequentially
+    smol::block_on(async {
+        for command in commands {
+            shell
+                .executable(command)
+                .environment(environment)
+                .status()
+                .await?;
+        }
+        Ok(())
+    })
 }
 
 /// A wrapper around the std Command type, which provides some more ergnomics.
@@ -92,22 +96,24 @@ impl Executable {
 
     /// Execute and return success/failure status. Stdout and stderr will be
     /// inherited from the parent.
-    pub fn status(&mut self) -> anyhow::Result<ExitStatus> {
+    pub async fn status(&mut self) -> anyhow::Result<ExitStatus> {
         info!("Executing {self}");
         self.command
             .status()
+            .await
             .with_context(|| format!("Error executing command {self}"))
     }
 
     /// Execute and return captured stdout. If the command fails (status >0),
     /// return an error. Stderr will be inherited from the parent.
-    pub fn check_output(&mut self) -> anyhow::Result<String> {
+    pub async fn check_output(&mut self) -> anyhow::Result<String> {
         info!("Executing {self}");
         let output = self
             .command
             // Forward stderr to the user, in case something goes wrong
             .stderr(Stdio::inherit())
             .output()
+            .await
             .with_context(|| format!("Error executing command {self}"))?;
         // TODO Replace with ExitStatus::exit_ok
         // https://github.com/rust-lang/rust/issues/84908

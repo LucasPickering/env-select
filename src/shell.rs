@@ -116,6 +116,7 @@ impl Shell {
                 // Single quotes are needed to prevent injection
                 // vulnerabilities.
                 // TODO escape inner single quotes
+                // https://github.com/LucasPickering/env-select/issues/65
                 ShellKind::Bash | ShellKind::Zsh => {
                     writeln!(output, "export '{variable}'='{value}'")
                         .expect("string writing is infallible");

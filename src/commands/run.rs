@@ -28,7 +28,8 @@ impl SubcommandTrait for RunCommand {
             context.shell.executable(&self.command.join(" ").into());
 
         // Execute the command
-        let status = executable.environment(&environment).status()?;
+        let status =
+            smol::block_on(executable.environment(&environment).status())?;
 
         // Clean up side effects, in reverse order
         revert_side_effects(
