@@ -7,7 +7,11 @@
 # User Guide
 
 - [Key Concepts](./user_guide/key_concepts.md)
-- [Setting Environment Variables](./user_guide/setting_environment_variables.md)
+- [Setting Environment Variables](./user_guide/env/README.md)
+  - [Dynamic Values (Files & Shell Commands)](./user_guide/env/dynamic.md)
+  - [Multiple Values from a Single Source](./user_guide/env/multi.md)
+  - [Adding to the PATH Variable](./user_guide/env/path.md)
+  - [Load Values from Kubernetes](./user_guide/env/kubernetes.md)
 - [Inheritance & Cascading Configs](./user_guide/inheritance.md)
 - [Side Effects](./user_guide/side_effects.md)
 - [Troubleshooting](./user_guide/troubleshooting.md)
