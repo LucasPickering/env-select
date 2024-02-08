@@ -97,7 +97,7 @@ pub struct ValueSourceInner {
     /// Source provides a mapping of line-delimited VARIABLE=value settings,
     /// instead of a single vlaue
     #[serde(default)]
-    pub multiple: bool,
+    pub multiple: MultiVariable,
 
     /// Value(s) should be masked in display output
     #[serde(default)]
@@ -127,6 +127,17 @@ pub enum ValueSourceKind {
         /// If omitted, use inherited cwd. Relative to config file
         cwd: Option<PathBuf>,
     },
+}
+
+/// Value for the `multiple` field of a value source
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, From, Hash, PartialEq)]
+#[serde(untagged)]
+pub enum MultiVariable {
+    /// Multi-variable loading is enabled or disabled
+    Bool(bool),
+    /// Multi-variable load is enabled, but only a fixed set of variables will
+    /// be loaded
+    List(Vec<String>),
 }
 
 /// A pair of imperative commands to run. The setup command is run during
@@ -300,9 +311,32 @@ impl ValueSource {
             kind: ValueSourceKind::Literal {
                 value: value.to_string(),
             },
-            multiple: false,
+            multiple: false.into(),
             sensitive: false,
         })
+    }
+}
+
+impl MultiVariable {
+    /// Is multi-variable loading enabled?
+    pub fn enabled(&self) -> bool {
+        !matches!(self, Self::Bool(false))
+    }
+
+    /// Should the given variable be loaded as part of this multi-variable
+    /// mapping?
+    pub fn includes(&self, variable: &String) -> bool {
+        match self {
+            // This shouldn't be called if multi is disabled
+            MultiVariable::Bool(enabled) => *enabled,
+            MultiVariable::List(variables) => variables.contains(variable),
+        }
+    }
+}
+
+impl Default for MultiVariable {
+    fn default() -> Self {
+        Self::Bool(false)
     }
 }
 

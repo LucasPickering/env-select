@@ -1,8 +1,8 @@
 //! Utilities for tests!
 
 use crate::config::{
-    Application, Config, Name, Profile, ProfileReference, SideEffect,
-    ValueSource, ValueSourceInner, ValueSourceKind,
+    Application, Config, MultiVariable, Name, Profile, ProfileReference,
+    SideEffect, ValueSource, ValueSourceInner, ValueSourceKind,
 };
 use indexmap::{IndexMap, IndexSet};
 use rstest_reuse::{self, *};
@@ -25,7 +25,7 @@ impl From<ValueSourceKind> for ValueSource {
         Self(ValueSourceInner {
             kind,
             sensitive: false,
-            multiple: false,
+            multiple: false.into(),
         })
     }
 }
@@ -38,7 +38,14 @@ impl ValueSource {
     }
 
     pub fn multiple(mut self) -> Self {
-        self.0.multiple = true;
+        self.0.multiple = true.into();
+        self
+    }
+
+    pub fn multiple_filtered(mut self, values: &[&str]) -> Self {
+        self.0.multiple = MultiVariable::List(
+            values.iter().copied().map(String::from).collect(),
+        );
         self
     }
 

@@ -39,6 +39,7 @@ extends = ["base"]
 SERVICE1 = "prd"
 SERVICE2 = "also-prd"
 multiple = {type = "literal", value = "MULTI1=multi1\nMULTI2=multi2", multiple = true}
+multiple_filtered = {type = "literal", value = "MULTI1=multi1\nMULTI2=multi2", multiple = ["MULTI1"]}
 
 [applications.server.profiles.secret]
 extends = ["base"]
@@ -109,6 +110,11 @@ fn test_parse_config() {
                                 "multiple",
                                 literal("MULTI1=multi1\nMULTI2=multi2")
                                     .multiple(),
+                            ),
+                            (
+                                "multiple_filtered",
+                                literal("MULTI1=multi1\nMULTI2=multi2")
+                                    .multiple_filtered(&["MULTI1"]),
                             ),
                         ]),
                     },

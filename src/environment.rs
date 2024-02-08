@@ -77,7 +77,7 @@ impl Environment {
             }
         };
 
-        if value_source.multiple {
+        if value_source.multiple.enabled() {
             // If we're expecting a multi-value mapping, parse that now. We'll
             // throw away the variable name from the config and use the ones in
             // the mapping
@@ -91,7 +91,10 @@ impl Environment {
                 })?;
 
             for (variable, value) in mapping {
-                self.insert(variable, value, value_source.sensitive);
+                // Check if the user specified only certain variables to include
+                if value_source.multiple.includes(&variable) {
+                    self.insert(variable, value, value_source.sensitive);
+                }
             }
         } else {
             self.insert(variable, raw_value, value_source.sensitive);
@@ -216,6 +219,7 @@ mod tests {
 
     #[test]
     fn test_resolve_multiple() {
+        // Load all from the mapping
         assert_eq!(
             environment(map([(
                 "multi", // This is thrown away
@@ -226,6 +230,17 @@ mod tests {
                 ("VARIABLE1", resolved_value("test1")),
                 ("VARIABLE2", resolved_value("test2")),
             ]))
+        );
+
+        // Load only a filtered set
+        assert_eq!(
+            environment(map([(
+                "multi", // This is thrown away
+                literal("VARIABLE1=test1\nVARIABLE2=test2")
+                    .multiple_filtered(&["VARIABLE1"])
+            )]))
+            .unwrap(),
+            Environment(map([("VARIABLE1", resolved_value("test1"))]))
         );
 
         assert_eq!(
@@ -261,7 +276,7 @@ mod tests {
                         kind: ValueSourceKind::Literal {
                             value: "PATH=~/.bin".into()
                         },
-                        multiple: true,
+                        multiple: true.into(),
                         sensitive: false,
                     })
                 )]),

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] - ReleaseDate
+
+### Added
+
+- Pass a list of strings to `multiple` to filter which values are loaded from a mapping
+
 ## [1.0.0] - 2024-02-02
 
 ### Added

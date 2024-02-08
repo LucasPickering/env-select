@@ -29,10 +29,10 @@ GREETING = {type = "command", command = "echo hello"}
 
 All value sources support the following common fields:
 
-| Option      | Type      | Default | Description                                                                                                   |
-| ----------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------- |
-| `multiple`  | `boolean` | `false` | Load a `VARIABLE=value` mapping, instead of just a `value`; [see more](#multiple-values-from-a-single-source) |
-| `sensitive` | `boolean` | `false` | Hide value in console output                                                                                  |
+| Option      | Type                  | Default | Description                                                                                                                                               |
+| ----------- | --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `multiple`  | `boolean`, `string[]` | `false` | Load a `VARIABLE=value` mapping, instead of just a `value`; Pass a list of variables to only load some. [See more](#multiple-values-from-a-single-source) |
+| `sensitive` | `boolean`             | `false` | Hide value in console output                                                                                                                              |
 
 ## Type-Specific Fields
 
