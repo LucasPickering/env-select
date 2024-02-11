@@ -24,8 +24,8 @@ pub fn shell_path(shell_kind: &str) -> PathBuf {
     )
 }
 
-/// Run a script inside the given shell. This will use `env-select init` to
-/// load the correct shell function, then
+/// Run a script inside the given shell. This will use `es init` to load the
+/// correct shell function, then run the script.
 ///
 /// `detect_shell` argument controls whether env-select will guess which shell
 /// it's running under (true) or we'll explicitly tell it with -s (false).
@@ -34,7 +34,7 @@ pub fn execute_script(
     shell_kind: &str,
     detect_shell: bool,
 ) -> Command {
-    // Get the function source from `env-select init`
+    // Get the function source from `es init`
     let mut es = env_select();
     if detect_shell {
         es.env("SHELL", shell_path(shell_kind));

@@ -2,14 +2,8 @@ use crate::config::{Application, MapExt, Name, Profile};
 use anyhow::bail;
 use dialoguer::{theme::ColorfulTheme, Select};
 use indexmap::IndexMap;
-use std::{
-    fmt::Write,
-    io::{self, IsTerminal},
-};
+use std::fmt::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-
-const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Prompt the user to select one option from a list.
 pub fn prompt_options<'a, T: Prompt>(
@@ -47,26 +41,15 @@ pub fn prompt_options<'a, T: Prompt>(
     }
 }
 
-/// Print the given message, but only if we're connected to a TTY. If not on a
-/// TTY, this hint isn't relevant so hide it.
+/// Print the given message to stderr, with warning styling
 pub fn print_hint(message: &str) -> anyhow::Result<()> {
-    if io::stdout().is_terminal() {
-        let mut stdout = StandardStream::stdout(ColorChoice::Always);
-        stdout.set_color(
-            ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true),
-        )?;
-        println!("{message}");
-        stdout.reset()?;
-    }
+    let mut stderr = StandardStream::stderr(ColorChoice::Always);
+    stderr.set_color(
+        ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true),
+    )?;
+    eprintln!("{message}");
+    stderr.reset()?;
     Ok(())
-}
-
-/// Print a friendly hint reminding the user to configure their shell
-pub fn print_installation_hint() -> anyhow::Result<()> {
-    print_hint(&format!(
-        "Initialize env-select automatically on shell startup: \
-            {REPOSITORY}/tree/v{VERSION}#configure-your-shell",
-    ))
 }
 
 /// Little helper to define how a type should be rendered in a TUI prompt
