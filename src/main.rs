@@ -71,7 +71,7 @@ fn main() -> ExitCode {
             // If the error includes an exit code, use it
             match error.downcast::<ExitCodeError>() {
                 // If we're propagating the exit code, we don't want to print
-                // the error. This is for `env-select run`, which means
+                // the error. This is for `es run`, which means
                 // stdout/stderr have been forwarded and we don't want to tack
                 // on any more logging.
                 Ok(error) => error.into(),

@@ -1,7 +1,4 @@
-use crate::{
-    commands::{CommandContext, SubcommandTrait},
-    console,
-};
+use crate::commands::{CommandContext, SubcommandTrait};
 use anyhow::Context;
 use clap::Parser;
 
@@ -17,6 +14,6 @@ impl SubcommandTrait for InitCommand {
             .init_script()
             .context("Error generating shell init script")?;
         println!("{script}");
-        console::print_installation_hint()
+        Ok(())
     }
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased] - ReleaseDate
+
+### Changed
+
+- `es set` subcommand no longer requires `--source-file` arg
+  - The intention is to make the command useful even without the wrapping function (and to provide helpful hint output)
+- Rename binary from `env-select` to `es`
+  - I'm _not_ considering this a breaking change, because running the binary directly was not considered a supported use case.
+
 ## [1.1.0] - 2024-02-09
 
 ### Added
