@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] - [ReleaseDate]
+
+### Changed
+
+- Fix some typos in docs and warning messages (oops)
+
 ## [1.1.1] - 2024-02-11
 
 ### Changed

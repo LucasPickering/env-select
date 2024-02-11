@@ -37,9 +37,9 @@ impl SubcommandTrait for SetCommand {
             // We were *not* called from the shell wrapper here, so just print
             // the output and let the user know about a pro tip
             print!("{source_output}");
-            // TODO update message/link
             print_hint(&format!(
-                "Add `es` wrapping shell function to apply to  env-select automatically on shell startup: \
+                "This output must be piped to `source` to be applied. \
+                    Install the `es` shell function to apply automatically: \
                     {WEBSITE}/book/install.html#install-shell-function",
             ))?;
         }

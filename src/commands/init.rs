@@ -13,7 +13,7 @@ impl SubcommandTrait for InitCommand {
             .shell
             .init_script()
             .context("Error generating shell init script")?;
-        println!("{script}");
+        print!("{script}");
         Ok(())
     }
 }

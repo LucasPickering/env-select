@@ -17,17 +17,17 @@ Here's how you install it:
 ### Bash
 
 ```sh
-echo "source <(es init --shell bash)" >> ~/.bashrc
+echo 'eval "$(es --shell bash init)"' >> ~/.bashrc
 ```
 
 ### Zsh
 
 ```sh
-echo "source <(es init --shell zsh)" >> ~/.zshrc
+echo "source <(es --shell zsh init)" >> ~/.zshrc
 ```
 
 ### Fish
 
 ```sh
-echo "es init --shell fish | source" >> ~/.config/fish/config.fish
+echo "es --shell fish init | source" >> ~/.config/fish/config.fish
 ```
