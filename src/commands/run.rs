@@ -6,14 +6,19 @@ use crate::{
 };
 use clap::Parser;
 
-/// Run a shell command in an augmented environment, via a configured
-/// variable/application
+/// Run a shell command in an augmented environment
+///
+/// The passed command is run through your shell, meaning you can use aliases
+/// and other shell features. See
+/// https://env-select.lucaspickering.me/book/user_guide/run_advanced.html for
+/// more details of shell interactions.
 #[derive(Clone, Debug, Parser)]
 pub struct RunCommand {
     #[command(flatten)]
     selection: Selection,
 
-    /// Shell command to execute
+    /// Shell command to execute. Can include multiple space-separated tokens.
+    /// Will be executed as if passed directly to your shell.
     #[arg(required = true, last = true)]
     command: Vec<String>,
 }
@@ -25,7 +30,7 @@ impl SubcommandTrait for RunCommand {
 
         // Undo clap's tokenization
         let mut executable: Executable =
-            context.shell.executable(&self.command.join(" ").into());
+            context.shell.executable_from_slice(&self.command);
 
         // Execute the command
         let status =

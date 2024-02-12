@@ -60,7 +60,7 @@ fn main() -> ExitCode {
             0 => LevelFilter::Warn,
             1 => LevelFilter::Info,
             2 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
+            3.. => LevelFilter::Trace,
         })
         .init();
     let verbose = args.global.verbose > 0;

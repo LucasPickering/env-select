@@ -14,6 +14,7 @@
   - [Load Values from Kubernetes](./user_guide/env/kubernetes.md)
 - [Inheritance & Cascading Configs](./user_guide/inheritance.md)
 - [Side Effects](./user_guide/side_effects.md)
+- [`es run` and Shell Interactions](./user_guide/run_advanced.md)
 
 # API Reference
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - [ReleaseDate]
+
+- Escape single quotes in variable names/values ([#65](https://github.com/LucasPickering/env-select/issues/65))
+- Preserve quotes in command arguments passed to `es run` ([#72](https://github.com/LucasPickering/env-select/issues/72))
+
 ## [1.1.2] - [2024-02-11]
 
 ### Changed

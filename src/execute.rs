@@ -79,6 +79,16 @@ impl Executable {
         executable
     }
 
+    #[cfg(test)]
+    pub fn program(&self) -> &str {
+        &self.program
+    }
+
+    #[cfg(test)]
+    pub fn arguments(&self) -> &[String] {
+        &self.arguments
+    }
+
     /// Set the current working directory of the command to be executed
     pub fn current_dir(&mut self, dir: &Path) -> &mut Self {
         debug!("Setting cwd for {self}: {dir:?}");
