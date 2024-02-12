@@ -47,12 +47,7 @@ pub fn execute_script(
     // Inject the function source into the script
     let function_source = String::from_utf8(assert.get_output().stdout.clone())
         .expect("Function output is not valid UTF-8");
-    let script = format!(
-        "
-        {function_source}
-        {script}
-        "
-    );
+    let script = format!("{function_source} {script}");
 
     let shell = shell_path(shell_kind);
     let mut command = Command::new(&shell);
