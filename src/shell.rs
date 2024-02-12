@@ -111,12 +111,12 @@ impl Shell {
     pub fn export(&self, environment: &Environment) -> String {
         let mut output = String::new();
         for (variable, value) in environment.iter_unmasked() {
+            // Escape single quotes to prevent injection vulnerabilities
+            let variable = escape(variable);
+            let value = escape(value);
+
             // Generate a shell command to export the variable
             match self.kind {
-                // Single quotes are needed to prevent injection
-                // vulnerabilities.
-                // TODO escape inner single quotes
-                // https://github.com/LucasPickering/env-select/issues/65
                 ShellKind::Bash | ShellKind::Zsh => {
                     writeln!(output, "export '{variable}'='{value}'")
                         .expect("string writing is infallible");
@@ -152,5 +152,64 @@ impl Display for Shell {
 impl From<ShellKind> for Shell {
     fn from(kind: ShellKind) -> Self {
         Self::from_kind(kind)
+    }
+}
+
+/// Escape single quotes in the given string, replacing them with \'
+fn escape(value: &str) -> String {
+    value.replace('\'', "\\'")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::Profile,
+        test_util::{literal, map},
+    };
+    use rstest::rstest;
+
+    /// Bash and Zsh use the same export format so we can test them together
+    #[rstest]
+    fn test_bash_zsh_export(
+        #[values(ShellKind::Bash, ShellKind::Zsh)] shell_kind: ShellKind,
+    ) {
+        let shell = Shell::from_kind(shell_kind);
+        let environment = environment(&shell);
+        assert_eq!(
+            shell.export(&environment).as_str(),
+            "\
+export 'SIMPLE'='simple'
+export 'ESCAPED\\'oops\\''='\\'; echo bobby tables \\''
+"
+        );
+    }
+
+    /// Fish has its own variable syntax so it needs to be tested separately
+    #[test]
+    fn test_fish_export() {
+        let shell = Shell::from_kind(ShellKind::Fish);
+        let environment = environment(&shell);
+        assert_eq!(
+            shell.export(&environment).as_str(),
+            "\
+set -gx 'SIMPLE' 'simple'
+set -gx 'ESCAPED\\'oops\\'' '\\'; echo bobby tables \\''
+"
+        );
+    }
+
+    fn environment(shell: &Shell) -> Environment {
+        Environment::from_profile(
+            shell,
+            &Profile {
+                variables: map([
+                    ("SIMPLE", literal("simple")),
+                    ("ESCAPED'oops'", literal("'; echo bobby tables '")),
+                ]),
+                ..Default::default()
+            },
+        )
+        .unwrap()
     }
 }
