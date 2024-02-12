@@ -8,7 +8,7 @@ use std::fs;
 
 const WEBSITE: &str = "https://env-select.lucaspickering.me";
 
-/// Modify shell environment via a configured variable/application
+/// Modify current shell environment
 #[derive(Clone, Debug, Parser)]
 pub struct SetCommand {
     #[command(flatten)]

@@ -112,17 +112,17 @@ impl Shell {
         let mut output = String::new();
         for (variable, value) in environment.iter_unmasked() {
             // Escape single quotes to prevent injection vulnerabilities
-            let variable = escape(variable);
-            let value = escape(value);
+            let variable = self.escape(variable);
+            let value = self.escape(value);
 
             // Generate a shell command to export the variable
             match self.kind {
                 ShellKind::Bash | ShellKind::Zsh => {
-                    writeln!(output, "export '{variable}'='{value}'")
+                    writeln!(output, "export {variable}={value}")
                         .expect("string writing is infallible");
                 }
                 ShellKind::Fish => {
-                    writeln!(output, "set -gx '{variable}' '{value}'")
+                    writeln!(output, "set -gx {variable} {value}")
                         .expect("string writing is infallible");
                 }
             }
@@ -130,13 +130,59 @@ impl Shell {
         output
     }
 
-    /// Get an [Executable] command to run in this shell
+    /// Get an [Executable] command to run in this shell, from a shell command
     pub fn executable(&self, command: &ShellCommand) -> Executable {
         // Use the full shell path if we have it. Otherwise, just pass
         // the shell name and hope it's in PATH
         let shell_program =
             self.path.clone().unwrap_or_else(|| self.kind.to_string());
         (shell_program, ["-c", command]).executable()
+    }
+
+    /// Get an [Executable] command to run in this shell, from a program name +
+    /// args. This will wrap each element in double quotes to preserve inner
+    /// quotes/parentheses/etc.
+    ///
+    /// This powers the arg de-parsing for `es run`. The goal is to execute the
+    /// command exactly as the shell would if `es run` weren't involved. E.g.:
+    ///
+    /// ```
+    /// es run app prof -- echo '$TEST'
+    /// ```
+    ///
+    /// should execute the same exact shell command as
+    ///
+    /// ```
+    /// echo '$TEST'
+    /// ```
+    ///
+    /// This means `$TEST` should *not* be expanded, because it's in single
+    /// quotes. The quotes will be dropped by the shell before `es run` is
+    /// invoked, so we need to add quotes back.
+    pub fn executable_from_slice(&self, command_args: &[String]) -> Executable {
+        // All supported shells currently treat single/double quotes the same so
+        // we can use unified logic
+        let command = command_args
+            .iter()
+            .map(|s| self.escape(s))
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.executable(&command.into())
+    }
+
+    /// Wrap the given string in single quotes, escaping inner single quotes.
+    /// This makes it safe to pass as a shell argument without possibility of
+    /// injection.
+    fn escape(&self, value: &str) -> String {
+        let escaped = match self.kind {
+            // Bash and zsh don't support escaping ' with just a backslash.
+            // You have to terminate the current string, add a single quote,
+            // then open a new string
+            // https://stackoverflow.com/a/1250279/1907353
+            ShellKind::Bash | ShellKind::Zsh => value.replace('\'', "'\\''"),
+            ShellKind::Fish => value.replace('\'', "\\'"),
+        };
+        format!("'{escaped}'")
     }
 }
 
@@ -155,19 +201,16 @@ impl From<ShellKind> for Shell {
     }
 }
 
-/// Escape single quotes in the given string, replacing them with \'
-fn escape(value: &str) -> String {
-    value.replace('\'', "\\'")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         config::Profile,
-        test_util::{literal, map},
+        test_util::{all_shells, literal, map},
     };
+    use assert_cmd::Command;
     use rstest::rstest;
+    use rstest_reuse::apply;
 
     /// Bash and Zsh use the same export format so we can test them together
     #[rstest]
@@ -180,7 +223,7 @@ mod tests {
             shell.export(&environment).as_str(),
             "\
 export 'SIMPLE'='simple'
-export 'ESCAPED\\'oops\\''='\\'; echo bobby tables \\''
+export 'ESCAPED'\\''oops'\\'''=''\\''; echo bobby tables '\\'''
 "
         );
     }
@@ -211,5 +254,29 @@ set -gx 'ESCAPED\\'oops\\'' '\\'; echo bobby tables \\''
             },
         )
         .unwrap()
+    }
+
+    /// A pseudo-integration test to make sure quotes and other scary characters
+    /// are escaped properly, so they *aren't* handled by the shell.
+    #[apply(all_shells)]
+    #[case(&[], "")]
+    #[case(&["echo", "-n", "$TEST"], "$TEST")]
+    #[case(&["echo", "-n", "double \"", "single '"], "double \" single '")]
+    #[case(&["echo", "-n", "$(echo scary!)"], "$(echo scary!)")]
+    fn test_executable_from_args(
+        shell_kind: ShellKind,
+        #[case] input: &[&str],
+        #[case] expected: &'static str,
+    ) {
+        let shell = Shell::from_kind(shell_kind);
+        let command: Vec<String> =
+            input.iter().copied().map(str::to_owned).collect();
+        let executable = shell.executable_from_slice(&command);
+        Command::new(executable.program())
+            .args(executable.arguments())
+            .assert()
+            .success()
+            .stdout(expected)
+            .stderr("");
     }
 }
