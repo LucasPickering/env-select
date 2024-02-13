@@ -273,6 +273,7 @@ set -gx 'ESCAPED\\'oops\\'' '\\'; echo bobby tables \\''
             input.iter().copied().map(str::to_owned).collect();
         let executable = shell.executable_from_slice(&command);
         Command::new(executable.program())
+            .arg("-P")
             .args(executable.arguments())
             .assert()
             .success()
