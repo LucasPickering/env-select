@@ -14,6 +14,7 @@ use crate::{
     GlobalArgs,
 };
 use clap::Subcommand;
+use smol::lock::OnceCell;
 use std::path::PathBuf;
 
 mod init;
@@ -67,7 +68,9 @@ pub struct Selection {
 /// Data container with helper methods for all CLI subcommands
 struct CommandContext {
     source_file: Option<PathBuf>,
-    config: Config,
+    /// Config is lazy loaded, so it doesn't have to be loaded for subcommands
+    /// that don't need it
+    config: OnceCell<Config>,
     shell: Shell,
 }
 
@@ -84,7 +87,6 @@ impl CommandContext {
             let _ = term.show_cursor();
         })?;
 
-        let config = Config::load()?;
         let shell = match shell_kind {
             Some(kind) => Shell::from_kind(kind),
             None => Shell::detect()?,
@@ -92,9 +94,21 @@ impl CommandContext {
 
         Ok(Self {
             source_file,
-            config,
+            config: OnceCell::new(),
             shell,
         })
+    }
+
+    /// Config is loaded lazily, to prevent unnecessary loads on subcommands
+    /// that don't need it. If this is the first config access of the process,
+    /// it will be loaded now. If loading fails, the error will be propagated.
+    /// The error is *not* cached, so subsequent calls after a failure will
+    /// prompt a retry. Generally the error should be fatal on the first call
+    /// though.
+    fn config(&self) -> anyhow::Result<&Config> {
+        // TODO replace with std::cell::OnceCell after get_or_try_init is stable
+        // https://github.com/rust-lang/rust/issues/109737
+        self.config.get_or_try_init_blocking(Config::load)
     }
 
     /// Select an application+profile, based on user input. For both application
@@ -105,7 +119,7 @@ impl CommandContext {
         selection: &'a Selection,
     ) -> anyhow::Result<&'a Profile> {
         let application = prompt_options(
-            &self.config.applications,
+            &self.config()?.applications,
             selection.application.as_ref(),
         )?;
         prompt_options(&application.profiles, selection.profile.as_ref())

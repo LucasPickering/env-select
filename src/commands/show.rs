@@ -38,9 +38,10 @@ impl SubcommandTrait for ShowCommand {
                 // Serialize isn't object-safe, so there's no way to return a
                 // dynamic object of what to serialize. That means each branch
                 // has to serialize itself
+                let config = context.config()?;
                 let content = if let Some(application) = application {
                     let application =
-                        context.config.applications.try_get(&application)?;
+                        config.applications.try_get(&application)?;
                     if let Some(profile) = profile {
                         let profile = application.profiles.try_get(&profile)?;
                         toml::to_string(profile)
@@ -49,7 +50,7 @@ impl SubcommandTrait for ShowCommand {
                     }
                 } else {
                     // Print entire config
-                    toml::to_string(&context.config)
+                    toml::to_string(config)
                 }?;
                 println!("{}", content);
             }
