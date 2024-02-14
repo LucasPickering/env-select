@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - [ReleaseDate]
+
+### Fixed
+
+- Do not load config for subcommands that don't need it (e.g. `es init`)
+  - This fixes error output showing for invalid configs when it's not relevant
+
 ## 1.1.3 - [2024-02-13]
 
 - Escape single quotes in variable names/values ([#65](https://github.com/LucasPickering/env-select/issues/65))
