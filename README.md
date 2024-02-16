@@ -4,7 +4,7 @@
 [![crates.io version](https://img.shields.io/crates/v/env-select.svg)](https://crates.io/crates/env-select)
 
 - [Home Page](https://env-select.lucaspickering.me)
-- [Installation](https://env-select.lucaspickering.me/artifacts/)
+- [Installation](https://env-select.lucaspickering.me/book/install.html)
 - [Docs](https://env-select.lucaspickering.me/book/)
 - [Changelog](https://env-select.lucaspickering.me/changelog/)
 

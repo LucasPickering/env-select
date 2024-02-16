@@ -1,6 +1,6 @@
 # Install
 
-See [the artifacts page](/artifacts) to download and install the `es` binary using your preferred method.
+See [the artifacts page](/artifacts) to download and install `es` using your preferred method.
 
 ## Install Shell Function
 
@@ -11,8 +11,6 @@ While not strictly required, it's highly recommended to install the `es` shell f
 This is necessary because a child process is not allowed to modify its parent's environment. That means the `es` process cannot modify the environment of the invoking shell. The wrapping shell function takes the output of `es` and runs it in that shell session to update the environment.
 
 Here's how you install it:
-
-**Restart your shell afterward to apply changes.**
 
 ### Bash
 
@@ -31,3 +29,5 @@ echo "source <(es --shell zsh init)" >> ~/.zshrc
 ```sh
 echo "es --shell fish init | source" >> ~/.config/fish/config.fish
 ```
+
+**Restart your shell afterward to apply changes.**
