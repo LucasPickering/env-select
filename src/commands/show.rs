@@ -1,8 +1,10 @@
 use crate::{
     commands::{CommandContext, SubcommandTrait},
+    completions::{complete_application, complete_profile},
     config::{MapExt, Name},
 };
 use clap::{Parser, Subcommand};
+use clap_complete::ArgValueCompleter;
 
 /// Print configuration and meta information
 #[derive(Clone, Debug, Parser)]
@@ -19,9 +21,11 @@ enum ShowSubcommand {
         // are incorrect for this use case
         /// Application to show configuration for. If omitted, show all
         /// applications.
+        #[clap(add = ArgValueCompleter::new(complete_application))]
         application: Option<Name>,
         /// Profile to show configuration for. If omitted, show all profiles
         /// for the selected application.
+        #[clap(add = ArgValueCompleter::new(complete_profile))]
         profile: Option<Name>,
     },
     /// Print the name or path to the shell in use

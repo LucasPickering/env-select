@@ -16,7 +16,8 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = {version = "^1.0.65", features = ["backtrace"]}
-clap = {version = "^4.4.0", features = ["derive"]}
+clap = {version = "^4.5.19", features = ["derive"]}
+clap_complete = {version = "4.5.32", features = ["unstable-dynamic"]}
 ctrlc = "^3.2.3"
 derive_more = "^0.99.17"
 dialoguer = {version = "^0.10.2", default-features = false}
