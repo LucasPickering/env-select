@@ -1,4 +1,5 @@
 mod commands;
+mod completions;
 mod config;
 mod console;
 mod environment;
@@ -10,9 +11,10 @@ mod test_util;
 mod shell;
 
 use crate::{commands::Commands, error::ExitCodeError, shell::ShellKind};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use log::{error, LevelFilter};
 // https://github.com/la10736/rstest/tree/master/rstest_reuse#cavelets
+use clap_complete::CompleteEnv;
 #[cfg(test)]
 #[allow(clippy::single_component_path_imports)]
 use rstest_reuse;
@@ -51,6 +53,8 @@ pub struct GlobalArgs {
 }
 
 fn main() -> ExitCode {
+    // If COMPLETE var is enabled, process will stop after completions
+    CompleteEnv::with_factory(Args::command).complete();
     let args = Args::parse();
     env_logger::Builder::new()
         .format_timestamp(None)

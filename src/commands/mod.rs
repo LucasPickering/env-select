@@ -6,6 +6,7 @@ use crate::{
     commands::{
         init::InitCommand, run::RunCommand, set::SetCommand, show::ShowCommand,
     },
+    completions::{complete_application, complete_profile},
     config::{Config, Name, Profile},
     console::prompt_options,
     environment::Environment,
@@ -14,6 +15,7 @@ use crate::{
     GlobalArgs,
 };
 use clap::Subcommand;
+use clap_complete::ArgValueCompleter;
 use smol::lock::OnceCell;
 use std::path::PathBuf;
 
@@ -58,10 +60,12 @@ trait SubcommandTrait {
 pub struct Selection {
     /// Application to select a profile for. If omitted, an interactive prompt
     /// will be shown to select between possible options
+    #[clap(add = ArgValueCompleter::new(complete_application))]
     pub application: Option<Name>,
 
     /// Profile to select. If omitted, an interactive prompt will be shown to
     /// select between possible options.
+    #[clap(add = ArgValueCompleter::new(complete_profile))]
     pub profile: Option<Name>,
 }
 

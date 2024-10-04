@@ -229,6 +229,12 @@ impl Config {
     }
 }
 
+impl Name {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 // Validate application/profile name. We do a bit of sanity checking here to
 // prevent stuff that might be confusing, or collide with env-select features
 impl FromStr for Name {
