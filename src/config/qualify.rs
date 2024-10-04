@@ -116,7 +116,7 @@ impl<'a> Qualify<'a> for PathBuf {
     /// path (if this path is relative).
     fn qualify(&mut self, config_path: &Self::Context) {
         let new_path = match config_path.parent() {
-            Some(directory) => directory.join(&self),
+            Some(directory) => directory.join(self.as_path()),
             None => panic!(
                 "Qualification context should be a path to a \
                 config file, but got {config_path:?}"
