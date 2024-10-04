@@ -2,6 +2,10 @@
 
 ## Unreleased - [ReleaseDate]
 
+### Changed
+
+- Upgrade Rust version to 1.80.0
+
 ### Fixed
 
 - Do not load config for subcommands that don't need it (e.g. `es init`)
