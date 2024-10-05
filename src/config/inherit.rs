@@ -103,7 +103,7 @@ impl<'a> InheritanceResolver<'a> {
 
             // Check if parent needs to be resolved. If parent is an unknown
             // path, we'll skip over here and fail down below
-            if let Some(grandparents) = self.unresolved.remove(parent) {
+            if let Some(grandparents) = self.unresolved.swap_remove(parent) {
                 // Parent is unresolved - resolve it now
                 self.resolve_profile(
                     parent.clone(),

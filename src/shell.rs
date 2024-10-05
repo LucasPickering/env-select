@@ -10,7 +10,7 @@ use log::{debug, info};
 use std::{
     env,
     ffi::OsStr,
-    fmt::{Debug, Display, Formatter, Write},
+    fmt::{Debug, Formatter, Write},
     path::PathBuf,
 };
 
@@ -38,11 +38,11 @@ pub struct Shell {
 /// binary name that we'll use to invoke it
 #[derive(Copy, Clone, Debug, Display, ValueEnum)]
 pub enum ShellKind {
-    #[display(fmt = "bash")]
+    #[display("bash")]
     Bash,
-    #[display(fmt = "zsh")]
+    #[display("zsh")]
     Zsh,
-    #[display(fmt = "fish")]
+    #[display("fish")]
     Fish,
 }
 

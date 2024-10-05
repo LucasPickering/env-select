@@ -11,9 +11,7 @@ use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
 use std::{
-    env,
-    fmt::Display,
-    fs,
+    env, fs,
     hash::Hash,
     path::{Path, PathBuf},
     str::FromStr,
@@ -168,7 +166,7 @@ pub struct SideEffect {
     Serialize,
     Deserialize,
 )]
-#[display(fmt = "`{}`", _0)]
+#[display("`{}`", _0)]
 pub struct ShellCommand(String);
 
 impl Config {

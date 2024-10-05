@@ -15,9 +15,6 @@ use clap::{CommandFactory, Parser};
 use log::{error, LevelFilter};
 // https://github.com/la10736/rstest/tree/master/rstest_reuse#cavelets
 use clap_complete::CompleteEnv;
-#[cfg(test)]
-#[allow(clippy::single_component_path_imports)]
-use rstest_reuse;
 use std::{path::PathBuf, process::ExitCode};
 
 /// A utility to select between predefined values or sets of environment
