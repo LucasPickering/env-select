@@ -7,6 +7,8 @@
 - Add shell completions, accessed by enabling the `COMPLETE` environment variable [#6](https://github.com/LucasPickering/env-select/issues/6)
   - For example, adding `COMPLETE=fish es | source` to your `fish.config` will enable completions for fish
   - [See docs](https://env-select.lucaspickering.me/book/user_guide/shell_completions.html) for more info and a list of supported shells
+- Add command aliases
+  - `es r` alias for `es run`, `es s` for `es set`
 
 ### Changed
 

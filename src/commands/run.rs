@@ -11,8 +11,9 @@ use clap::Parser;
 /// The passed command is run through your shell, meaning you can use aliases
 /// and other shell features. See
 /// https://env-select.lucaspickering.me/book/user_guide/run_advanced.html for
-/// more details of shell interactions.
+/// more details on shell interactions.
 #[derive(Clone, Debug, Parser)]
+#[clap(visible_alias = "r")]
 pub struct RunCommand {
     #[command(flatten)]
     selection: Selection,
