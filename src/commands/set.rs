@@ -10,6 +10,7 @@ const WEBSITE: &str = "https://env-select.lucaspickering.me";
 
 /// Modify current shell environment
 #[derive(Clone, Debug, Parser)]
+#[clap(visible_alias = "s")]
 pub struct SetCommand {
     #[command(flatten)]
     selection: Selection,
