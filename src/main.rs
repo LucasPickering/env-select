@@ -17,10 +17,12 @@ use log::{error, LevelFilter};
 use clap_complete::CompleteEnv;
 use std::{path::PathBuf, process::ExitCode};
 
+const COMMAND_NAME: &str = "es";
+
 /// A utility to select between predefined values or sets of environment
 /// variables.
 #[derive(Debug, Parser)]
-#[clap(bin_name = "es", author, version, about, long_about = None)]
+#[clap(bin_name = COMMAND_NAME, author, version, about, long_about = None)]
 pub struct Args {
     #[command(subcommand)]
     command: Commands,

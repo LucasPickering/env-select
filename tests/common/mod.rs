@@ -42,6 +42,13 @@ pub fn execute_script(
         es.args(["-s", shell_kind]);
     }
     es.arg("init");
+    if shell_kind == "zsh" {
+        // Completion script doesn't work with zsh because the compdef command
+        // isn't present by default. I tried loading it with compinit but that
+        // has other issues. This is a shortcut. We aren't trying to test
+        // completion anyway, it's just a bonus.
+        es.arg("--no-completions");
+    }
     let assert = es.assert().success();
 
     // Inject the function source into the script
