@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>env-select Changelog</title><link>http://127.0.0.1:7979/changelog</link><description>Changelog information for env-select</description><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><atom:link href="http://127.0.0.1:7979/changelog.rss" rel="self"/><item><title>1.1.3 - 2024-02-13</title><link>http://127.0.0.1:7979/changelog/v1.1.3</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v1.1.3</guid><content:encoded><![CDATA[<ul>
+<li>Escape single quotes in variable names/values (<a href="https://github.com/LucasPickering/env-select/issues/65" rel="noopener noreferrer">#65</a>)</li>
+<li>Preserve quotes in command arguments passed to <code>es run</code> (<a href="https://github.com/LucasPickering/env-select/issues/72" rel="noopener noreferrer">#72</a>)</li>
+</ul>
+]]></content:encoded></item><item><title>1.1.2 - 2024-02-11</title><link>http://127.0.0.1:7979/changelog/v1.1.2</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v1.1.2</guid><content:encoded><![CDATA[<h3>Changed</h3>
+<ul>
+<li>Fix some typos in docs and warning messages (oops)</li>
+</ul>
+]]></content:encoded></item><item><title>1.1.1 - 2024-02-11</title><link>http://127.0.0.1:7979/changelog/v1.1.1</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v1.1.1</guid><content:encoded><![CDATA[<h3>Changed</h3>
+<ul>
+<li><code>es set</code> subcommand no longer requires <code>--source-file</code> arg
+<ul>
+<li>The intention is to make the command useful even without the wrapping function (and to provide helpful hint output)</li>
+</ul>
+</li>
+<li>Rename binary from <code>env-select</code> to <code>es</code>
+<ul>
+<li>I'm <em>not</em> considering this a breaking change, because running the binary directly was not considered a supported use case.</li>
+</ul>
+</li>
+</ul>
+]]></content:encoded></item><item><title>1.1.0 - 2024-02-09</title><link>http://127.0.0.1:7979/changelog/v1.1.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v1.1.0</guid><content:encoded><![CDATA[<h3>Added</h3>
+<ul>
+<li>Pass a list of strings to <code>multiple</code> to filter which values are loaded from a mapping</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Resolve values in parallel
+<ul>
+<li>This means profile resolution will only take as long as the slowest step, rather than the sum of all steps</li>
+</ul>
+</li>
+</ul>
+]]></content:encoded></item><item><title>1.0.0 - 2024-02-02</title><link>http://127.0.0.1:7979/changelog/v1.0.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v1.0.0</guid><content:encoded><![CDATA[<h3>Added</h3>
+<ul>
+<li><a href="https://env-select.lucaspickering.me" rel="noopener noreferrer">A new website!</a></li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Use <code>es</code> instead of <code>env-select</code> in CLI help output</li>
+<li><code>es show config</code> now accepts optional arguments to print for a single application or profile</li>
+</ul>
+]]></content:encoded></item><item><title>v0.11.0</title><link>http://127.0.0.1:7979/changelog/v0.11.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.11.0</guid><content:encoded><![CDATA[<h3>Breaking Changes</h3>
+<ul>
+<li>Remove the concept of native commands
+<ul>
+<li>The <code>command</code> value source is effectively gone, and the <code>shell</code> value source type has to renamed to <code>command</code> to replace the old one
+<ul>
+<li>In other words, the <code>shell</code> type is gone and the <code>command</code> field for the <code>command</code> type now takes a string instead of a <code>string[]</code></li>
+</ul>
+</li>
+<li>Side effects can now only be shell commands (string literals)</li>
+<li>This is to reduce the overall complexity of the tool. I don't thi
+nk there's a strong use case for native commands, where you can't just use shell commands</li>
+</ul>
+</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Add <code>cwd</code> option to <code>command</code> value source type, to force the command to execute in a particular directory</li>
+<li>Modifications to the <code>PATH</code> variable will be prepended to the existing value, rather than replacing it
+<ul>
+<li>This special behavior is based on the variable name, and only applies to <code>PATH</code></li>
+</ul>
+</li>
+</ul>
+]]></content:encoded></item><item><title>v0.10.0</title><link>http://127.0.0.1:7979/changelog/v0.10.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.10.0</guid><content:encoded><![CDATA[<h3>Breaking Changes</h3>
+<ul>
+<li>Cascading config files are now only merged down to the profile level</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Added side effects. See usage docs for more. Imperative environment configuration!</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Sourceable output from <code>es set</code> is now written to a temporary file instead of stdout. This difference is handled by the shell functions, so no change to behavior for users</li>
+</ul>
+]]></content:encoded></item><item><title>v0.9.0</title><link>http://127.0.0.1:7979/changelog/v0.9.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.9.0</guid><content:encoded><![CDATA[<h3>Breaking Changes</h3>
+<ul>
+<li><code>es show</code> is now broken into sub-subcommands: <code>es show config</code> and <code>es show shell</code></li>
+<li>Unknown keys in config will now be rejected</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Add <code>--run-in-shell</code> flag to <code>es run</code></li>
+<li><code>es run</code> and <code>es set</code> no longer require an application name in the command; if not given, they will prompt, the same way they prompt for profile name</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Provide more context if the subprocess in <code>es run</code> fails</li>
+</ul>
+]]></content:encoded></item><item><title>v0.8.0</title><link>http://127.0.0.1:7979/changelog/v0.8.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.8.0</guid><content:encoded><![CDATA[<h3>New Features</h3>
+<ul>
+<li>Load multiple values from a single source with the <code>multiple</code> flag
+<ul>
+<li>Supported for all value source types</li>
+</ul>
+</li>
+<li><code>file</code> value source, which loads value(s) from a file path (combine with <code>multiple = true</code> for maximum fun!)</li>
+<li>Support non-string primitives for simple literal values
+<ul>
+<li>E.g. <code>VARIABLE1 = 123</code> or <code>VARIABLE2 = false</code></li>
+<li>These values will simply be stringified before export, since shells only understand strings anyway</li>
+</ul>
+</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Improve test coverage!</li>
+</ul>
+]]></content:encoded></item><item><title>v0.7.0</title><link>http://127.0.0.1:7979/changelog/v0.7.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.7.0</guid><content:encoded><![CDATA[<p>This should be the last release with major breaking changes. The config layout has changed dramatically in order to support planned (and unplanned) future features.</p>
+<h3>Breaking Changes</h3>
+<ul>
+<li>Removed <code>vars</code> config section. You can no longer provide mappings for single variables. Instead, define a set of profiles with single variables
+<ul>
+<li>This feature didn't provide any additional functionality, it was just a slight convenience at the cost of complexity both for users and code</li>
+</ul>
+</li>
+<li>Restructured profile config:
+<ul>
+<li>Renamed <code>apps</code> field to <code>applications</code></li>
+<li>Add new <code>profiles</code> and <code>variables</code> subfields</li>
+<li>Overall, this means <code>apps.app1.profile1.VARIABLE1</code> will now be <code>applications.app1.profiles.profile1.variables.VARIABLE1</code></li>
+<li>This is more tedious, but allows for current and future features to fit into the config</li>
+</ul>
+</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Profile inheritance - profiles can now extend other profiles, eliminating the need to copy-paste a bunch of common content between profiles</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li><code>es</code> shell function definitions now use the full path to the <code>env-select</code> binary rather than relying on <code>PATH</code>
+<ul>
+<li>This eliminates the need to add <code>env-select</code> to the <code>PATH</code>, and also guarantees that the copy of <code>env-select</code> that is being executed by <code>es</code> is the one that generated that <code>es</code> definition in the first place</li>
+</ul>
+</li>
+</ul>
+]]></content:encoded></item><item><title>v0.6.2</title><link>http://127.0.0.1:7979/changelog/v0.6.2</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.6.2</guid><content:encoded><![CDATA[<h3>Other</h3>
+<ul>
+<li>Fix binaries being built for the wrong architecture</li>
+</ul>
+]]></content:encoded></item><item><title>v0.6.1</title><link>http://127.0.0.1:7979/changelog/v0.6.1</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.6.1</guid><content:encoded><![CDATA[<h3>Other</h3>
+<ul>
+<li>Defer shell path loading until it's needed. This will enable env-select init on systems that don't have the specified shell present</li>
+</ul>
+]]></content:encoded></item><item><title>v0.6.0</title><link>http://127.0.0.1:7979/changelog/v0.6.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.6.0</guid><content:encoded><![CDATA[<p>I tried to fit all the foreseeable breaking changes into this release, there may be some more though.</p>
+<h3>Breaking Changes</h3>
+<ul>
+<li>Complex value sources (i.e. anything other than a simple string) now require the <code>type</code> field. E.g. <code>type = "literal"</code> or <code>type = "command"</code>
+<ul>
+<li>As value sources get more intricate, options start to collide. This field makes it easy to disambiguate between source types, which allows them to have overlapping option names</li>
+</ul>
+</li>
+<li>Rename <code>--shell-path</code> option <em>back</em> to <code>--shell</code>, and it once again only requires a shell name, rather than a full path
+<ul>
+<li>The full path for the shell will be grabbed via the <code>which</code> command now. This means whatever shell you use must be in your <code>PATH</code></li>
+</ul>
+</li>
+<li>Rename <code>command</code> value source type to <code>shell</code>
+<ul>
+<li>The old <code>command</code> name is now used for commands that are executed natively</li>
+</ul>
+</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Add <code>run</code> subcommand, for one-off environment usage
+<ul>
+<li>This runs a single command in the configured environment, rather than modifying the shell environment. Similar to <code>kubectl exec</code> or <code>poetry run</code></li>
+</ul>
+</li>
+<li>Add <code>command</code> value source type, which accepts an array of strings and executes a command natively, rather than via the shell</li>
+<li>Add <code>kubernetes</code> value source type, which executes a command in a kubernetes pod via <code>kubectl</code></li>
+<li>Support complex literal values, enabling the <code>sensitive</code> option for literals
+<ul>
+<li>This option probably isn't that useful, but now the field is supported globally</li>
+</ul>
+</li>
+<li>Add a third level of verbosity (<code>-vvv</code>) to enable more granularity in log filtering</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Fix macOS x86 build in CI (the binary will appear on releases now)</li>
+<li>Add a bunch of tests</li>
+</ul>
+]]></content:encoded></item><item><title>v0.5.0</title><link>http://127.0.0.1:7979/changelog/v0.5.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.5.0</guid><content:encoded><![CDATA[<h3>New Features</h3>
+<ul>
+<li>Shell configuration can now be loaded from <code>env-select init</code> function. Add this to your shell startup script to load it automatically. See installation instructions for more info.</li>
+<li><code>--shell-path</code> option allows you to override the <code>$SHELL</code> variable. This is rarely necessary, mostly useful for debugging.</li>
+<li>Print configured variables to stderr to give some feedback when running <code>es set</code></li>
+<li>Add <code>sensitive</code> option to <code>command</code> value source, to mask data in information output</li>
+<li>Support additional verbosity level with <code>-vv</code></li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Dynamic commands are now executed within the scope of env-select . Env-select will run your shell as a subprocess to execute the command, rather than print out a templated string (e.g. <code>$(echo def)</code>) to invoke a subshell. This reduces the surface area for bugs, and opens up options new kinds of dynamic values.</li>
+</ul>
+]]></content:encoded></item><item><title>v0.4.1</title><link>http://127.0.0.1:7979/changelog/v0.4.1</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.4.1</guid><content:encoded><![CDATA[<h3>Other</h3>
+<p>Fixed release process. Binaries for 0.4.0 are attached to this release</p>
+]]></content:encoded></item><item><title>v0.4.0</title><link>http://127.0.0.1:7979/changelog/v0.4.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.4.0</guid><content:encoded><![CDATA[<h3>Breaking Changes</h3>
+<ul>
+<li>Renamed binary from <code>es</code> to <code>env-select</code> (to facilitate shell plugins using <code>es</code>)</li>
+<li>Moved main functionality under <code>env-select set</code> subcommand</li>
+</ul>
+<h3>New Features</h3>
+<ul>
+<li>Added fish plugin</li>
+<li>Added <code>show</code> subcommand</li>
+</ul>
+<h3>Bug Fixes &amp; Tweaks</h3>
+<ul>
+<li>Emit non-zero exit code for errors</li>
+<li>Print available variables and applications for bare <code>env-select set</code> or an invalid variable/application name</li>
+</ul>
+]]></content:encoded></item><item><title>v0.3.0</title><link>http://127.0.0.1:7979/changelog/v0.3.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.3.0</guid><content:encoded><![CDATA[<h3>New Features</h3>
+<ul>
+<li>Add <code>command</code> variant for values, allowing lazily evaluated commands instead of static values</li>
+</ul>
+<h3>Other</h3>
+<ul>
+<li>Add <code>aarch64-apple-darwin</code> to release build</li>
+<li>Upgrade to rust 1.67.1</li>
+</ul>
+]]></content:encoded></item><item><title>v0.2.0</title><link>http://127.0.0.1:7979/changelog/v0.2.0</link><category domain="https://github.com/LucasPickering/env-select">env-select Changelog</category><guid>http://127.0.0.1:7979/changelog/v0.2.0</guid><content:encoded><![CDATA[<ul>
+<li>Reorient schema around named profiles (breaking change)</li>
+<li>Fix terminal cursor disappearing after ctrl-c (#5)</li>
+<li>Allow passing profile name (or literal value, for single variables) as a cmd arg to skip interactive prompt (#3)</li>
+<li>Give profiles/variables consistent ordering in prompt (#2)</li>
+<li>Clean up error handling a bit</li>
+<li>Lots of doc improvements</li>
+</ul>
+]]></content:encoded></item></channel></rss>
