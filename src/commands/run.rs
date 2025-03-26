@@ -4,7 +4,7 @@ use crate::{
     error::ExitCodeError,
     execute::{revert_side_effects, Executable},
 };
-use clap::Parser;
+use clap::{Parser, ValueHint};
 
 /// Run a shell command in an augmented environment
 ///
@@ -20,7 +20,12 @@ pub struct RunCommand {
 
     /// Shell command to execute. Can include multiple space-separated tokens.
     /// Will be executed as if passed directly to your shell.
-    #[arg(required = true, last = true)]
+    #[arg(
+        required = true,
+        last = true,
+        num_args = 1..,
+        value_hint = ValueHint::CommandWithArguments,
+    )]
     command: Vec<String>,
 }
 
